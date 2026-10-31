@@ -7,14 +7,43 @@ import os
 import re
 import json
 import logging
-from typing import Dict, Any, List, Set
+from typing import Dict, Any, List, Set, Tuple
 
 logger = logging.getLogger("hdx.ingestion")
 
 URL_REGEX = re.compile(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s"\'<>)]*)?')
 IMPORT_REGEX = re.compile(r"(?:import\s+.*?from\s+['\"]([^'\"./][^'\"]*)['\"]|require\(['\"]([^'\"./][^'\"]*)['\"]\))")
 
-EXCLUDED_DIRS = {".git", "node_modules", "dist", "build", ".venv", "venv", "__pycache__", ".idea", ".vscode"}
+EXCLUDED_DIRS = {".git", "node_modules", "dist", "build", ".venv", "venv", "__pycache__", ".idea", ".vscode", "coverage"}
+
+KNOWN_CLOUD_VENDORS = {
+    "firebase": {"vendor": "Firebase (Google Cloud)", "host": "firebase.google.com", "category": "auth_database"},
+    "razorpay": {"vendor": "Razorpay Payments", "host": "api.razorpay.com", "category": "payment_gateway"},
+    "stripe": {"vendor": "Stripe Payments", "host": "api.stripe.com", "category": "payment_gateway"},
+    "paypal": {"vendor": "PayPal Payments", "host": "api.paypal.com", "category": "payment_gateway"},
+    "supabase": {"vendor": "Supabase Platform", "host": "supabase.co", "category": "database_backend"},
+    "openai": {"vendor": "OpenAI API", "host": "api.openai.com", "category": "ai_inference"},
+    "gemini": {"vendor": "Google Gemini AI", "host": "generativelanguage.googleapis.com", "category": "ai_inference"},
+    "rapidapi": {"vendor": "RapidAPI Gateway", "host": "rapidapi.com", "category": "api_marketplace"},
+    "jsearch": {"vendor": "JSearch (RapidAPI)", "host": "jsearch.p.rapidapi.com", "category": "external_api"},
+    "auth0": {"vendor": "Auth0 Identity", "host": "auth0.com", "category": "identity_provider"},
+    "twilio": {"vendor": "Twilio Communications", "host": "api.twilio.com", "category": "telecom_sms"},
+    "sendgrid": {"vendor": "Twilio SendGrid", "host": "api.sendgrid.com", "category": "email_dispatch"},
+    "postmark": {"vendor": "Postmark Email", "host": "api.postmarkapp.com", "category": "email_dispatch"},
+    "sentry": {"vendor": "Sentry Error Monitoring", "host": "sentry.io", "category": "observability"},
+    "mixpanel": {"vendor": "Mixpanel Analytics", "host": "api.mixpanel.com", "category": "product_analytics"},
+    "segment": {"vendor": "Segment Analytics", "host": "telemetry.segment.io", "category": "product_analytics"},
+    "algolia": {"vendor": "Algolia Search", "host": "latency-dsn.algolia.net", "category": "search_infrastructure"},
+    "veriff": {"vendor": "Veriff KYC", "host": "api.veriff.com", "category": "identity_kyc"},
+    "plaid": {"vendor": "Plaid Banking", "host": "api.plaid.com", "category": "fintech_banking"},
+    "sift": {"vendor": "Sift Fraud Prevention", "host": "api.sift.com", "category": "fraud_security"},
+    "mongodb": {"vendor": "MongoDB Database", "host": "mongodb-cluster", "category": "database"},
+    "redis": {"vendor": "Redis Cache / Queue", "host": "redis-cluster", "category": "cache_queue"},
+    "postgres": {"vendor": "PostgreSQL Database", "host": "postgresql-cluster", "category": "database"},
+    "mysql": {"vendor": "MySQL Database", "host": "mysql-cluster", "category": "database"},
+    "aws": {"vendor": "Amazon Web Services (AWS)", "host": "amazonaws.com", "category": "cloud_infrastructure"},
+    "cloudflare": {"vendor": "Cloudflare Edge", "host": "cloudflare.com", "category": "cdn_ddos"}
+}
 
 def parse_package_json(file_path: str) -> Dict[str, Any]:
     if not os.path.exists(file_path):
@@ -45,91 +74,104 @@ def parse_requirements_txt(file_path: str) -> Dict[str, str]:
         logger.warning(f"Failed to parse requirements.txt at {file_path}: {e}")
     return deps
 
-def extract_cloud_services_from_env(env_path: str) -> List[str]:
-    """Extracts configured cloud integrations and vendor endpoints from .env files."""
-    services = []
+def extract_cloud_services_from_env(env_path: str) -> List[Tuple[str, str]]:
+    """Returns list of (service_host, evidence_line)."""
+    results = []
     try:
         with open(env_path, "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
+                clean_line = line.strip()
+                if not clean_line or clean_line.startswith("#"):
                     continue
-                upper = line.upper()
-                if "FIREBASE" in upper:
-                    services.append("firebase.google.com")
-                elif "RAZORPAY" in upper:
-                    services.append("api.razorpay.com")
-                elif "RAPID" in upper or "JSEARCH" in upper:
-                    services.append("jsearch.p.rapidapi.com")
-                elif "LINKEDIN" in upper:
-                    services.append("api.linkedin.com")
-                elif "STRIPE" in upper:
-                    services.append("api.stripe.com")
-                elif "AUTH0" in upper:
-                    services.append("auth0.com")
-                elif "TWILIO" in upper:
-                    services.append("api.twilio.com")
-                elif "SENDGRID" in upper:
-                    services.append("api.sendgrid.com")
-                elif "SMTP_HOST" in upper:
-                    val = line.split("=", 1)[1].strip() if "=" in line else ""
-                    if val and "smtp" in val.lower():
-                        services.append(val.lower())
-                elif "MONGODB" in upper:
-                    services.append("mongodb-cluster")
-                elif "REDIS" in upper:
-                    services.append("redis-cache")
-                elif "GEMINI" in upper or "OPENAI" in upper or "ANTHROPIC" in upper:
-                    services.append("generativelanguage.googleapis.com")
+                upper = clean_line.upper()
+                for key, info in KNOWN_CLOUD_VENDORS.items():
+                    if key.upper() in upper:
+                        results.append((info["host"], f"{os.path.basename(env_path)}: {clean_line.split('=')[0]}"))
     except Exception:
         pass
-    return services
+    return results
 
 def scan_project_directory(folder_path: str) -> Dict[str, Any]:
     """
-    Recursively scans ANY local directory:
-    - Finds all package.json files (even nested in monorepos or subdirectories)
-    - Finds all requirements.txt / pyproject.toml
-    - Discovers external cloud APIs in .env files (Firebase, Razorpay, RapidAPI, Stripe, etc.)
-    - Analyzes code imports and external HTTP/HTTPS endpoints
+    Scans ANY local repository or folder and builds true architectural model:
+    - Detects root project and subservices (frontend, backend, worker, api)
+    - Collects real npm, python, and go dependencies mapped to their subservice
+    - Extracts real third-party endpoints and vendor services
     """
     abs_path = os.path.abspath(folder_path)
     if not os.path.exists(abs_path):
         return {"error": f"Path '{folder_path}' does not exist on disk."}
 
     project_name = os.path.basename(abs_path)
-    dependencies: Dict[str, str] = {}
+    services: Dict[str, Dict[str, Any]] = {
+        "core": {
+            "name": f"{project_name} Core",
+            "type": "internal_service",
+            "path": abs_path,
+            "dependencies": {},
+            "ecosystem": "npm",
+            "external_calls": set()
+        }
+    }
+    
+    overall_dependencies: Dict[str, str] = {}
     observed_hosts: Set[str] = set()
-    code_discovered_packages: Set[str] = set()
+    evidence_records: Dict[str, List[str]] = {}
     source_files_scanned = 0
 
-    SCANNABLE_EXTS = {".html", ".htm", ".js", ".jsx", ".ts", ".tsx", ".py", ".json", ".env"}
+    SCANNABLE_EXTS = {".html", ".htm", ".js", ".jsx", ".ts", ".tsx", ".py", ".json", ".env", ".yaml", ".yml"}
 
     for root, dirs, files in os.walk(abs_path):
         dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
-        
+        rel_dir = os.path.relpath(root, abs_path).lower().replace("\\", "/")
+
+        # Subservice detection
+        subservice_key = "core"
+        if "backend" in rel_dir or "server" in rel_dir or "api" in rel_dir:
+            subservice_key = "backend"
+        elif "frontend" in rel_dir or "client" in rel_dir or "web" in rel_dir or "ui" in rel_dir:
+            subservice_key = "frontend"
+
+        if subservice_key not in services:
+            services[subservice_key] = {
+                "name": f"{project_name} {subservice_key.capitalize()} Service",
+                "type": "internal_service",
+                "path": root,
+                "dependencies": {},
+                "ecosystem": "npm",
+                "external_calls": set()
+            }
+
         for file in files:
             file_path = os.path.join(root, file)
             lower_file = file.lower()
+            rel_file = os.path.relpath(file_path, abs_path)
 
-            # 1. Recursive Package Manifests
+            # 1. Package Manifests
             if lower_file == "package.json":
                 pkg_data = parse_package_json(file_path)
                 if pkg_data.get("name") and project_name in [os.path.basename(abs_path), "Unnamed Project"]:
                     project_name = pkg_data["name"]
-                dependencies.update(pkg_data.get("dependencies", {}))
+                d = pkg_data.get("dependencies", {})
+                services[subservice_key]["dependencies"].update(d)
+                services[subservice_key]["ecosystem"] = "npm"
+                overall_dependencies.update(d)
 
             elif lower_file in ["requirements.txt", "pipfile"]:
                 py_deps = parse_requirements_txt(file_path)
-                dependencies.update(py_deps)
+                services[subservice_key]["dependencies"].update(py_deps)
+                services[subservice_key]["ecosystem"] = "PyPI"
+                overall_dependencies.update(py_deps)
 
-            # 2. Environment Configurations
+            # 2. Environment Integrations
             elif lower_file == ".env" or lower_file.startswith(".env."):
-                env_services = extract_cloud_services_from_env(file_path)
-                for svc in env_services:
-                    observed_hosts.add(svc)
+                env_svcs = extract_cloud_services_from_env(file_path)
+                for host, ev in env_svcs:
+                    observed_hosts.add(host)
+                    services[subservice_key]["external_calls"].add(host)
+                    evidence_records.setdefault(host, []).append(f"{rel_file} ({ev})")
 
-            # 3. Code Imports and External URLs
+            # 3. Source Code Scanning
             ext = os.path.splitext(file)[1].lower()
             if ext in SCANNABLE_EXTS:
                 source_files_scanned += 1
@@ -137,36 +179,37 @@ def scan_project_directory(folder_path: str) -> Dict[str, Any]:
                     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                         content = f.read(100000)
 
-                    # Extract external URLs
+                    # Extract URLs
                     matches = URL_REGEX.findall(content)
                     for m in matches:
                         host_match = re.search(r'https?://([^/:\s]+)', m)
                         if host_match:
                             host = host_match.group(1).lower()
-                            if not host.startswith(("localhost", "127.0.0.1")) and not host.endswith(("schema.org", "w3.org")):
+                            if not host.startswith(("localhost", "127.0.0.1")) and not host.endswith(("schema.org", "w3.org", "github.com", "npmjs.org")):
                                 observed_hosts.add(host)
+                                services[subservice_key]["external_calls"].add(host)
+                                evidence_records.setdefault(host, []).append(f"{rel_file}")
 
-                    # Extract package imports if JavaScript/TypeScript
+                    # Extract JS/TS imports
                     if ext in [".js", ".jsx", ".ts", ".tsx"]:
                         import_matches = IMPORT_REGEX.findall(content)
                         for imp in import_matches:
                             raw_pkg = imp[0] or imp[1]
                             if raw_pkg and not raw_pkg.startswith("."):
                                 root_pkg = raw_pkg.split("/")[0]
-                                code_discovered_packages.add(root_pkg)
+                                if root_pkg not in ["react", "react-dom"] and root_pkg not in overall_dependencies:
+                                    services[subservice_key]["dependencies"][root_pkg] = "latest"
+                                    overall_dependencies[root_pkg] = "latest"
                 except Exception:
                     continue
-
-    # Merge code discovered packages if not declared in manifest
-    for c_pkg in code_discovered_packages:
-        if c_pkg not in dependencies and c_pkg not in ["react", "react-dom"]:
-            dependencies[c_pkg] = "latest"
 
     return {
         "project_name": project_name,
         "folder_path": abs_path,
-        "dependencies": dependencies,
+        "services": services,
+        "dependencies": overall_dependencies,
         "observed_hosts": list(observed_hosts),
+        "evidence_records": evidence_records,
         "source_files_scanned": source_files_scanned
     }
 

@@ -5,6 +5,11 @@ from app.analysis import calculate_financial_exposure
 
 router = APIRouter()
 
+@router.get("/{scan_id}")
+async def get_scenarios(scan_id: str):
+    from app.db import db
+    return db.in_memory_scenarios.get(scan_id, [])
+
 @router.post("/{scan_id}/simulate")
 async def simulate_failure(scan_id: str, request: SimulationRequest):
     scenario_id = str(uuid.uuid4())
