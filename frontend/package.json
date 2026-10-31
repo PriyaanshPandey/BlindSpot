@@ -9,18 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "cytoscape": "^3.29.2",
+    "cytoscape-dagre": "^4.0.1",
+    "lucide-react": "^0.395.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "cytoscape": "^3.29.2",
-    "lucide-react": "^0.395.0",
     "recharts": "^2.12.7",
-    "clsx": "^2.1.1",
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
+    "@types/cytoscape": "^3.19.16",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "@types/cytoscape": "^3.19.16",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",

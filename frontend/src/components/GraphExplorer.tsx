@@ -1,23 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import cytoscape, { Core, EventObject } from 'cytoscape';
+// @ts-ignore
+import dagre from 'cytoscape-dagre';
 import {
   ZoomIn,
   ZoomOut,
   Maximize2,
   RotateCcw,
   Layers,
-  HelpCircle,
   ChevronDown,
   ChevronUp,
-  ShieldAlert,
-  Server,
-  Package,
-  Database,
-  Cloud,
-  Star,
-  Activity
 } from 'lucide-react';
 import { GraphData, GraphNode } from '../types';
+
+// Register dagre layout once
+cytoscape.use(dagre);
 
 interface GraphExplorerProps {
   graphData: GraphData | null;
@@ -27,12 +24,77 @@ interface GraphExplorerProps {
   filterLayer: string;
 }
 
+/** Map tier number -> y rank string for dagre rankSep-based layout */
+const TIER_RANK: Record<number, string> = {
+  0: 'source',
+  1: 'min',
+  2: 'same',
+  3: 'same',
+  4: 'same',
+  5: 'same',
+  6: 'max',
+  7: 'sink',
+};
+
+/** Compute tier from node data */
+function getTier(node: GraphNode): number {
+  const t = (node as any).tier as number | undefined;
+  if (t !== undefined) return t;
+  const type = node.type as string;
+  if (type === 'business_journey') return 0;
+  if (type === 'application') return 1;
+  if (type === 'internal_service') return 2;
+  const sub = (node as any).subtype as string | undefined;
+  if (type === 'software_package' && sub === 'direct') return 3;
+  if (type === 'software_package' && sub === 'transitive') return 4;
+  if (type === 'infrastructure_resource' || type === 'infrastructure') return 5;
+  if (type === 'vendor' || type === 'external_api') return 6;
+  if (type === 'vendor_upstream') return 7;
+  return 3;
+}
+
+/** Node colors per tier */
+const TIER_COLORS: Record<number, { bg: string; border: string; text: string }> = {
+  0: { bg: '#92400E', border: '#FBBF24', text: '#FEF3C7' },   // amber  – Journey
+  1: { bg: '#1E3A8A', border: '#60A5FA', text: '#DBEAFE' },   // blue   – App
+  2: { bg: '#4C1D95', border: '#A78BFA', text: '#EDE9FE' },   // violet – Service
+  3: { bg: '#1E293B', border: '#64748B', text: '#CBD5E1' },   // slate  – Direct pkg
+  4: { bg: '#0F172A', border: '#334155', text: '#94A3B8' },   // dark   – Transitive
+  5: { bg: '#064E3B', border: '#34D399', text: '#D1FAE5' },   // green  – Infra
+  6: { bg: '#7F1D1D', border: '#F87171', text: '#FEE2E2' },   // red    – Vendor
+  7: { bg: '#1A1A2E', border: '#818CF8', text: '#E0E7FF' },   // indigo – Upstream
+};
+
+/** Node shapes per tier */
+const TIER_SHAPES: Record<number, string> = {
+  0: 'star',
+  1: 'round-rectangle',
+  2: 'ellipse',
+  3: 'round-rectangle',
+  4: 'diamond',
+  5: 'barrel',
+  6: 'cut-rectangle',
+  7: 'tag',
+};
+
+/** Node sizes per tier (width, height) */
+const TIER_SIZES: Record<number, [number, number]> = {
+  0: [52, 52],
+  1: [56, 44],
+  2: [50, 40],
+  3: [40, 32],
+  4: [30, 24],
+  5: [46, 40],
+  6: [46, 36],
+  7: [36, 28],
+};
+
 export const GraphExplorer: React.FC<GraphExplorerProps> = ({
   graphData,
   onSelectNode,
   selectedNodeId,
   blastRadiusIds,
-  filterLayer
+  filterLayer,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
@@ -61,24 +123,32 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       activeEdges = activeEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
     }
 
-    // Tier-based hierarchical positioning
     const elements = [
       ...activeNodes.map((node) => {
-        const subtype = (node as any).subtype || 'direct';
-        const t = node.type as string;
-        const tier = (node as any).tier ?? (t === 'business_journey' ? 0 : t === 'application' ? 1 : t === 'internal_service' ? 2 : (t === 'infrastructure' || t === 'infrastructure_resource') ? 3 : t === 'software_package' ? 4 : 5);
+        const tier = getTier(node);
+        const colors = TIER_COLORS[tier] ?? TIER_COLORS[3];
+        const [w, h] = TIER_SIZES[tier] ?? [38, 30];
+        const shape = TIER_SHAPES[tier] ?? 'round-rectangle';
+        const isVuln = node.status === 'compromised';
         return {
           data: {
             id: node.id,
             label: node.label,
             type: node.type,
-            subtype: subtype,
-            tier: tier,
+            subtype: (node as any).subtype || '',
+            tier,
             provenance: node.provenance,
             status: node.status,
             criticality: node.criticality,
-            raw: node
-          }
+            raw: node,
+            // inline style data for cytoscape
+            bg: isVuln ? '#7F1D1D' : colors.bg,
+            border: isVuln ? '#EF4444' : colors.border,
+            textColor: colors.text,
+            nodeWidth: w,
+            nodeHeight: h,
+            shape,
+          },
         };
       }),
       ...activeEdges.map((edge) => ({
@@ -87,268 +157,202 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           source: edge.source,
           target: edge.target,
           relation: edge.relation,
-          provenance: edge.provenance
-        }
-      }))
+          provenance: edge.provenance,
+        },
+      })),
     ];
+
+    // Dagre layout config (proper top-down tiered DAG)
+    const dagreLayout: any = {
+      name: 'dagre',
+      rankDir: 'TB',         // top-to-bottom
+      align: 'UL',
+      nodeSep: 60,           // horizontal spacing between nodes in same rank
+      rankSep: 120,          // vertical spacing between ranks
+      edgeSep: 20,
+      ranker: 'longest-path',
+      animate: false,
+      padding: 80,
+    };
+
+    // Organic cose layout for force-directed view
+    const coseLayout: any = {
+      name: 'cose',
+      animate: false,
+      padding: 60,
+      nodeRepulsion: () => 600000,
+      idealEdgeLength: () => 120,
+      edgeElasticity: () => 200,
+      nestingFactor: 1.2,
+      gravity: 0.25,
+      numIter: 1000,
+      initialTemp: 200,
+      coolingFactor: 0.95,
+      minTemp: 1.0,
+    };
 
     const cy = cytoscape({
       container: containerRef.current,
       elements,
       style: [
-        // Base Node Style
+        // ── Base node (uses inline data-driven values)
         {
           selector: 'node',
           style: {
             'label': 'data(label)',
-            'color': '#F1F5F9',
-            'font-family': 'Inter, system-ui, sans-serif',
-            'font-size': '11px',
+            'color': 'data(textColor)',
+            'font-family': '"Inter", "SF Pro Display", system-ui, sans-serif',
+            'font-size': '10px',
             'font-weight': 'bold',
             'text-valign': 'bottom',
-            'text-margin-y': 7,
-            'text-background-color': '#09050C',
-            'text-background-opacity': 0.85,
-            'text-background-padding': '3px',
+            'text-halign': 'center',
+            'text-margin-y': 6,
+            'text-background-color': '#04020A',
+            'text-background-opacity': 0.88,
+            'text-background-padding': '2px',
             'text-background-shape': 'roundrectangle',
-            'text-border-color': '#2A1D30',
-            'text-border-width': 1,
-            'text-border-opacity': 0.8,
-            'text-max-width': '140px',
+            'text-max-width': '120px',
             'text-wrap': 'ellipsis',
-            'background-color': '#130C19',
-            'border-width': 2,
-            'border-color': '#475569',
-            'width': 46,
-            'height': 46,
-            'transition-property': 'background-color, border-color, width, height',
-            'transition-duration': 0.25
-          }
+            'text-overflow-wrap': 'whitespace',
+            'background-color': 'data(bg)',
+            'border-width': 1.5,
+            'border-color': 'data(border)',
+            'width': 'data(nodeWidth)',
+            'height': 'data(nodeHeight)',
+            // shape is applied per-node below via selectors
+            'transition-property': 'border-color, border-width',
+            'transition-duration': 150,
+          },
         },
 
-        // Tier 0: Business Journey
+        // ── Highlighted blast-radius nodes
         {
-          selector: 'node[type = "business_journey"]',
+          selector: 'node.blast-radius-node',
           style: {
-            'shape': 'star',
-            'background-color': '#D97706',
             'border-color': '#FBBF24',
-            'border-width': 2.5,
-            'width': 56,
-            'height': 56,
-            'text-background-color': '#271704',
-            'text-border-color': '#F59E0B'
-          }
-        },
-
-        // Tier 1: Client Application
-        {
-          selector: 'node[type = "application"]',
-          style: {
-            'shape': 'round-rectangle',
-            'background-color': '#1D4ED8',
-            'border-color': '#60A5FA',
             'border-width': 3,
-            'width': 58,
-            'height': 58,
-            'text-background-color': '#0C1E4A',
-            'text-border-color': '#3B82F6'
-          }
+          },
         },
 
-        // Tier 2: Internal Services / Microservices
+        // ── Selected node
         {
-          selector: 'node[type = "internal_service"]',
+          selector: 'node.selected-node',
           style: {
-            'shape': 'hexagon',
-            'background-color': '#6D28D9',
-            'border-color': '#A78BFA',
-            'border-width': 2.5,
-            'width': 52,
-            'height': 52,
-            'text-background-color': '#240B48',
-            'text-border-color': '#8B5CF6'
-          }
+            'border-color': '#FFFFFF',
+            'border-width': 3,
+          },
         },
 
-        // Tier 3: Infrastructure (Databases, Caches)
-        {
-          selector: 'node[type = "infrastructure"]',
-          style: {
-            'shape': 'barrel',
-            'background-color': '#047857',
-            'border-color': '#34D399',
-            'border-width': 2.5,
-            'width': 50,
-            'height': 50,
-            'text-background-color': '#032C20',
-            'text-border-color': '#10B981'
-          }
-        },
-
-        // Tier 4: Direct Software Packages
-        {
-          selector: 'node[type = "software_package"][subtype = "direct"]',
-          style: {
-            'shape': 'round-rectangle',
-            'background-color': '#1E293B',
-            'border-color': '#64748B',
-            'border-width': 2,
-            'width': 44,
-            'height': 44
-          }
-        },
-
-        // Tier 5: Transitive Sub-Packages
-        {
-          selector: 'node[type = "software_package"][subtype = "transitive"]',
-          style: {
-            'shape': 'ellipse',
-            'background-color': '#0F172A',
-            'border-color': '#94A3B8',
-            'border-style': 'dotted',
-            'border-width': 2,
-            'width': 36,
-            'height': 36,
-            'font-size': '10px'
-          }
-        },
-
-        // Tier 6: Cloud Vendors & External APIs
-        {
-          selector: 'node[type = "vendor"]',
-          style: {
-            'shape': 'octagon',
-            'background-color': '#BE123C',
-            'border-color': '#FB7185',
-            'border-width': 2.5,
-            'width': 48,
-            'height': 48,
-            'text-background-color': '#3E0413',
-            'text-border-color': '#F43F5E'
-          }
-        },
-        {
-          selector: 'node[type = "external_api"]',
-          style: {
-            'shape': 'diamond',
-            'background-color': '#B45309',
-            'border-color': '#FCD34D',
-            'border-width': 2.5,
-            'width': 46,
-            'height': 46
-          }
-        },
-
-        // Tier 7: Vendor Upstream Infrastructure
-        {
-          selector: 'node[type = "vendor_upstream"]',
-          style: {
-            'shape': 'hexagon',
-            'background-color': '#3730A3',
-            'border-color': '#818CF8',
-            'border-style': 'dashed',
-            'border-width': 2,
-            'width': 40,
-            'height': 40,
-            'font-size': '10px'
-          }
-        },
-
-        // Status Modifiers
+        // ── Compromised / vuln nodes – pulsing red override
         {
           selector: 'node[status = "compromised"]',
           style: {
-            'background-color': '#DC2626',
-            'border-color': '#F87171',
-            'border-width': 4,
-            'text-background-color': '#450A0A',
-            'text-border-color': '#EF4444'
-          }
+            'border-color': '#EF4444',
+            'border-width': 2.5,
+          },
         },
+
+        // ── Per-tier shapes
+        { selector: 'node[tier = 0]', style: { 'shape': 'star' } },
+        { selector: 'node[tier = 1]', style: { 'shape': 'round-rectangle' } },
+        { selector: 'node[tier = 2]', style: { 'shape': 'ellipse' } },
+        { selector: 'node[tier = 3]', style: { 'shape': 'round-rectangle' } },
+        { selector: 'node[tier = 4]', style: { 'shape': 'diamond' } },
+        { selector: 'node[tier = 5]', style: { 'shape': 'barrel' } },
+        { selector: 'node[tier = 6]', style: { 'shape': 'cut-rectangle' } },
+        { selector: 'node[tier = 7]', style: { 'shape': 'tag' } },
+
+        // ── Observed (shadow) nodes
         {
           selector: 'node[provenance = "observed"]',
           style: {
             'border-style': 'dashed',
-            'border-color': '#F59E0B',
-            'border-width': 3
-          }
+          },
         },
 
-        // Edges
+        // ─────── EDGE STYLES ───────
+
+        // Default edge
         {
           selector: 'edge',
           style: {
-            'width': 1.8,
+            'width': 1.2,
             'line-color': '#334155',
             'target-arrow-color': '#475569',
             'target-arrow-shape': 'triangle',
+            'arrow-scale': 0.7,
             'curve-style': 'bezier',
-            'arrow-scale': 0.85
-          }
+            'line-style': 'solid',
+            'opacity': 0.7,
+          },
         },
+
+        // depends_on – direct
+        {
+          selector: 'edge[relation = "depends_on"]',
+          style: {
+            'line-color': '#4B5563',
+            'target-arrow-color': '#6B7280',
+            'width': 1.2,
+          },
+        },
+
+        // depends_on_transitive – dashed dimmer
         {
           selector: 'edge[relation = "depends_on_transitive"]',
           style: {
-            'width': 1.5,
             'line-style': 'dashed',
-            'line-color': '#64748B',
-            'target-arrow-color': '#64748B',
-            'arrow-scale': 0.7
-          }
+            'line-color': '#374151',
+            'target-arrow-color': '#4B5563',
+            'width': 1,
+            'opacity': 0.6,
+          },
         },
+
+        // calls_service – service flow
         {
-          selector: 'edge[relation = "queries_database"]',
+          selector: 'edge[relation = "calls_service"]',
           style: {
-            'line-color': '#10B981',
-            'target-arrow-color': '#10B981',
-            'width': 2.2
-          }
+            'line-color': '#7C3AED',
+            'target-arrow-color': '#8B5CF6',
+            'width': 2,
+          },
         },
+
+        // calls_api – external vendor
         {
           selector: 'edge[relation = "calls_api"]',
           style: {
-            'line-color': '#F43F5E',
-            'target-arrow-color': '#F43F5E',
-            'width': 2
-          }
-        },
-        {
-          selector: 'edge[relation = "powers_journey"]',
-          style: {
-            'line-style': 'dotted',
-            'line-color': '#F59E0B',
-            'target-arrow-color': '#F59E0B',
-            'width': 2.5
-          }
+            'line-color': '#991B1B',
+            'target-arrow-color': '#EF4444',
+            'width': 1.5,
+            'line-style': 'dashed',
+          },
         },
 
-        // Selection
+        // queries_database / uses_cache
         {
-          selector: ':selected',
+          selector: 'edge[relation = "queries_database"], edge[relation = "uses_cache"]',
           style: {
-            'border-color': '#FFFFFF',
-            'border-width': 4
-          }
-        }
+            'line-color': '#065F46',
+            'target-arrow-color': '#34D399',
+            'width': 1.5,
+          },
+        },
+
+        // relies_on_upstream
+        {
+          selector: 'edge[relation = "relies_on_upstream"]',
+          style: {
+            'line-color': '#312E81',
+            'target-arrow-color': '#818CF8',
+            'width': 1,
+            'line-style': 'dotted',
+            'opacity': 0.5,
+          },
+        },
       ],
-      layout:
-        layoutMode === 'hierarchical'
-          ? {
-              name: 'breadthfirst',
-              directed: true,
-              roots: activeNodes.filter((n) => n.type === 'business_journey').map((n) => n.id),
-              padding: 60,
-              spacingFactor: 2.2,
-              avoidOverlap: true
-            }
-          : {
-              name: 'cose',
-              animate: false,
-              padding: 60,
-              nodeRepulsion: () => 450000,
-              idealEdgeLength: () => 100
-            }
+      layout: layoutMode === 'hierarchical' ? dagreLayout : coseLayout,
     });
 
     cy.on('tap', 'node', (evt: EventObject) => {
@@ -360,6 +364,11 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       if (evt.target === cy) {
         onSelectNode(null);
       }
+    });
+
+    // Fit after layout finishes
+    cy.one('layoutstop', () => {
+      cy.fit(undefined, 60);
     });
 
     cyRef.current = cy;
@@ -397,141 +406,108 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
 
   const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.25);
   const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
-  const handleFit = () => cyRef.current?.fit(undefined, 50);
+  const handleFit = () => cyRef.current?.fit(undefined, 60);
   const handleReset = () => cyRef.current?.reset();
+
+  const LEGEND_ITEMS = [
+    { color: '#1E3A8A', border: '#60A5FA', label: 'Application (Root)' },
+    { color: '#4C1D95', border: '#A78BFA', label: 'Internal Service' },
+    { color: '#1E293B', border: '#64748B', label: 'Direct Package' },
+    { color: '#0F172A', border: '#334155', label: 'Transitive Dep' },
+    { color: '#064E3B', border: '#34D399', label: 'Infrastructure (DB/Cache)' },
+    { color: '#7F1D1D', border: '#F87171', label: 'Cloud Vendor / API' },
+    { color: '#1A1A2E', border: '#818CF8', label: 'Vendor Upstream' },
+    { color: '#7F1D1D', border: '#EF4444', label: '⚠ Compromised CVE' },
+  ];
+
+  const EDGE_LEGEND = [
+    { style: 'solid', color: '#6B7280', label: 'Declared dependency' },
+    { style: 'dashed', color: '#4B5563', label: 'Transitive / Observed' },
+    { style: 'dotted', color: '#818CF8', label: 'Vendor upstream' },
+  ];
 
   return (
     <div className="w-full h-full relative bg-[#060205] overflow-hidden select-none">
-      {/* 1. Cytoscape Canvas */}
+      {/* Cytoscape Canvas */}
       <div ref={containerRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
-      {/* 2. Architecture Map Notation Legend (Floating Collapsible Glass Panel) */}
-      <div className="absolute top-4 left-4 z-20 max-w-xs w-full">
-        <div className="rounded-2xl bg-black/75 backdrop-blur-xl border border-white/10 shadow-2xl overflow-hidden transition-all duration-300">
+      {/* Architecture Notation Legend */}
+      <div className="absolute top-4 left-4 z-20 w-56">
+        <div className="rounded-xl bg-black/80 backdrop-blur-xl border border-white/10 shadow-2xl overflow-hidden">
           <button
             onClick={() => setIsLegendOpen(!isLegendOpen)}
-            className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold text-slate-200 hover:text-white border-b border-white/[0.06] transition-colors"
+            className="w-full px-3 py-2 flex items-center justify-between text-[11px] font-semibold text-slate-200 hover:text-white border-b border-white/[0.06] transition-colors"
           >
-            <div className="flex items-center gap-2">
-              <Layers className="w-3.5 h-3.5 text-rose-400" />
-              <span>Architecture Notation & Symbols</span>
+            <div className="flex items-center gap-1.5">
+              <Layers className="w-3 h-3 text-rose-400" />
+              <span>Architecture Legend</span>
             </div>
-            {isLegendOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {isLegendOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
 
           {isLegendOpen && (
-            <div className="p-3.5 space-y-2 text-[11px] text-slate-300 max-h-72 overflow-y-auto">
-              <div className="grid grid-cols-2 gap-2 pb-2 border-b border-white/[0.06]">
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 rounded bg-blue-600 border border-blue-400 shrink-0" />
-                  <span>Application</span>
+            <div className="p-3 space-y-1.5 text-[10px] text-slate-300">
+              {LEGEND_ITEMS.map((item) => (
+                <div key={item.label} className="flex items-center gap-2">
+                  <span
+                    className="w-3 h-3 rounded-sm shrink-0"
+                    style={{ backgroundColor: item.color, border: `1px solid ${item.border}` }}
+                  />
+                  <span>{item.label}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 rounded-full bg-purple-600 border border-purple-400 shrink-0" />
-                  <span>Internal Service</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 rounded-sm bg-slate-800 border border-slate-500 shrink-0" />
-                  <span>Direct Package</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-slate-900 border border-slate-400 border-dotted shrink-0" />
-                  <span>Transitive Sub-dep</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 rounded bg-emerald-700 border border-emerald-400 shrink-0" />
-                  <span>DB / Cache</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 rounded bg-rose-700 border border-rose-400 shrink-0" />
-                  <span>Cloud Vendor</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 rounded bg-amber-600 border border-amber-400 shrink-0" />
-                  <span>Business Journey</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 rounded bg-red-600 border border-red-400 animate-pulse shrink-0" />
-                  <span>Compromised CVE</span>
-                </div>
-              </div>
-
-              {/* Edge Relationships */}
-              <div className="space-y-1 pt-1 text-[10px] text-slate-400">
-                <div className="flex items-center justify-between">
-                  <span>── Solid Edge:</span>
-                  <span className="text-slate-300">Declared Connection</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>╌╌ Dashed Edge:</span>
-                  <span className="text-amber-300">Observed Shadow API / Transitive</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>···· Dotted Edge:</span>
-                  <span className="text-emerald-300">Powers Business Journey</span>
-                </div>
+              ))}
+              <div className="border-t border-white/[0.06] pt-1.5 mt-1.5 space-y-1 text-[9px] text-slate-400">
+                {EDGE_LEGEND.map((e) => (
+                  <div key={e.label} className="flex items-center gap-2">
+                    <span className="w-5 h-0 shrink-0" style={{
+                      borderTop: `2px ${e.style} ${e.color}`,
+                      display: 'inline-block',
+                    }} />
+                    <span>{e.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* 3. Floating Zoom & Layout Controls */}
+      {/* Layout + Zoom Controls */}
       <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2">
-        {/* Layout Switcher */}
-        <div className="flex items-center bg-black/75 backdrop-blur-xl border border-white/10 rounded-2xl p-1 shadow-xl">
-          <button
-            onClick={() => setLayoutMode('hierarchical')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              layoutMode === 'hierarchical'
-                ? 'bg-rose-500 text-white shadow-md shadow-rose-500/30'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Tiered Hierarchy
-          </button>
-          <button
-            onClick={() => setLayoutMode('organic')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              layoutMode === 'organic'
-                ? 'bg-rose-500 text-white shadow-md shadow-rose-500/30'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Force Organic
-          </button>
+        {/* Layout switcher */}
+        <div className="flex items-center bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl p-1 shadow-xl">
+          {(['hierarchical', 'organic'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setLayoutMode(mode)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all ${
+                layoutMode === mode
+                  ? 'bg-rose-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {mode === 'hierarchical' ? 'Tiered DAG' : 'Force Graph'}
+            </button>
+          ))}
         </div>
 
-        {/* Viewport Zoom Controls */}
-        <div className="flex items-center justify-end gap-1.5 bg-black/75 backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 shadow-xl">
-          <button
-            onClick={handleZoomIn}
-            className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
-            title="Zoom In"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleZoomOut}
-            className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
-            title="Zoom Out"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleFit}
-            className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
-            title="Fit to Screen"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleReset}
-            className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
-            title="Reset Viewport"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
+        {/* Viewport controls */}
+        <div className="flex items-center justify-end gap-1 bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl p-1.5 shadow-xl">
+          {[
+            { icon: <ZoomIn className="w-4 h-4" />, fn: handleZoomIn, title: 'Zoom In' },
+            { icon: <ZoomOut className="w-4 h-4" />, fn: handleZoomOut, title: 'Zoom Out' },
+            { icon: <Maximize2 className="w-4 h-4" />, fn: handleFit, title: 'Fit to Screen' },
+            { icon: <RotateCcw className="w-4 h-4" />, fn: handleReset, title: 'Reset Viewport' },
+          ].map(({ icon, fn, title }) => (
+            <button
+              key={title}
+              onClick={fn}
+              title={title}
+              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
+            >
+              {icon}
+            </button>
+          ))}
         </div>
       </div>
     </div>
