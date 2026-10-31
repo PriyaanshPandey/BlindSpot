@@ -1,11 +1,16 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from datetime import datetime
+from app.db import db
 
 router = APIRouter()
 
 @router.get("/{scan_id}/graph")
 async def get_scan_graph(scan_id: str, filter_layer: str = "all"):
-    # Return rich, evidence-backed dependency graph for demo
+    # Return dynamic graph stored during create_scan
+    if scan_id in db.in_memory_graphs:
+        return db.in_memory_graphs[scan_id]
+        
+    # Baseline demo graph fallback if someone requests an arbitrary/initial ID
     nodes = [
         {"id": "app:nexus-frontend", "label": "Nexus Web Storefront", "type": "application", "provenance": "declared", "status": "healthy", "criticality": "critical"},
         {"id": "service:nexus-api", "label": "Checkout API Gateway", "type": "internal_service", "provenance": "declared", "status": "healthy", "criticality": "critical"},
@@ -42,6 +47,9 @@ async def get_scan_graph(scan_id: str, filter_layer: str = "all"):
 
 @router.get("/{scan_id}/findings")
 async def get_scan_findings(scan_id: str):
+    if scan_id in db.in_memory_findings:
+        return db.in_memory_findings[scan_id]
+        
     return [
         {
             "id": "find-001",
@@ -79,4 +87,3 @@ async def get_scan_findings(scan_id: str):
             }
         }
     ]
-

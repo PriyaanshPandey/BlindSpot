@@ -21,6 +21,7 @@ import {
 
 export const App: React.FC = () => {
   const [mode, setMode] = useState<'builder' | 'enterprise'>('enterprise');
+  const [targetPath, setTargetPath] = useState<string>('./demo/nexus-commerce');
   const [isScanning, setIsScanning] = useState(false);
   const [scan, setScan] = useState<ScanSummary | null>(null);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
@@ -33,13 +34,14 @@ export const App: React.FC = () => {
 
   // Initial load
   useEffect(() => {
-    handleRunScan();
+    handleRunScan('./demo/nexus-commerce');
   }, []);
 
-  const handleRunScan = async () => {
+  const handleRunScan = async (pathOverride?: string) => {
+    const pathToScan = pathOverride || targetPath;
     setIsScanning(true);
     try {
-      const scanRes = await createScan('./demo/nexus-commerce');
+      const scanRes = await createScan(pathToScan);
       setScan(scanRes);
 
       const [graphRes, findingsRes] = await Promise.all([
@@ -49,72 +51,10 @@ export const App: React.FC = () => {
 
       setGraphData(graphRes);
       setFindings(findingsRes);
+      setSelectedNode(null);
       setSimulation(null);
-    } catch (err) {
-      console.warn('Backend unavailable, using baseline data:', err);
-      // Fallback baseline for initial standalone UI development
-      setGraphData({
-        scan_id: 'default-scan',
-        created_at: new Date().toISOString(),
-        nodes: [
-          { id: 'app:nexus-frontend', label: 'Nexus Web Storefront', type: 'application', provenance: 'declared', status: 'healthy', criticality: 'critical' },
-          { id: 'service:nexus-api', label: 'Checkout API Gateway', type: 'internal_service', provenance: 'declared', status: 'healthy', criticality: 'critical' },
-          { id: 'vendor:stripe', label: 'Stripe Payments', type: 'vendor', provenance: 'declared', status: 'healthy', criticality: 'critical' },
-          { id: 'vendor:auth0', label: 'Auth0 Identity', type: 'vendor', provenance: 'declared', status: 'healthy', criticality: 'high' },
-          { id: 'vendor:aws-us-east-1', label: 'AWS US-East-1', type: 'infrastructure_resource', provenance: 'disclosed', status: 'healthy', criticality: 'critical' },
-          { id: 'pkg:event-stream', label: 'npm: event-stream@3.3.6', type: 'software_package', provenance: 'declared', status: 'compromised', criticality: 'critical' },
-          { id: 'unknown:analytics-cdn', label: 'telemetry.untrusted-cdn.net', type: 'external_api', provenance: 'observed', status: 'warning', criticality: 'high' },
-          { id: 'journey:checkout', label: 'Journey: Customer Checkout', type: 'business_journey', provenance: 'inferred', status: 'healthy', criticality: 'critical' }
-        ],
-        edges: [
-          { id: 'e1', source: 'app:nexus-frontend', target: 'service:nexus-api', relation: 'calls_api', provenance: 'declared', confidence_score: 1.0 },
-          { id: 'e2', source: 'service:nexus-api', target: 'vendor:stripe', relation: 'calls_api', provenance: 'declared', confidence_score: 1.0 },
-          { id: 'e3', source: 'service:nexus-api', target: 'vendor:auth0', relation: 'authenticates_via', provenance: 'declared', confidence_score: 1.0 },
-          { id: 'e4', source: 'vendor:stripe', target: 'vendor:aws-us-east-1', relation: 'depends_on', provenance: 'vendor_passport', confidence_score: 0.95 },
-          { id: 'e5', source: 'service:nexus-api', target: 'pkg:event-stream', relation: 'transitive_dependency', provenance: 'declared', confidence_score: 1.0 },
-          { id: 'e6', source: 'app:nexus-frontend', target: 'unknown:analytics-cdn', relation: 'calls_api', provenance: 'observed', confidence_score: 0.99 },
-          { id: 'e7', source: 'vendor:stripe', target: 'journey:checkout', relation: 'powers_journey', provenance: 'inferred', confidence_score: 1.0 }
-        ],
-        metadata: { total_nodes: 8, total_edges: 7, discrepancy_count: 1, vulnerability_count: 1 }
-      });
-      setFindings([
-        {
-          id: 'find-001',
-          scan_id: 'default-scan',
-          type: 'discrepancy_undeclared_endpoint',
-          title: 'Undocumented External Endpoint Observed',
-          description: 'Browser network crawling detected communication with telemetry.untrusted-cdn.net which is absent from declared infrastructure and architecture documentation.',
-          severity: 'high',
-          target_node_id: 'unknown:analytics-cdn',
-          affected_journey_ids: ['journey:checkout'],
-          evidence_references: ['trace:span-99120', 'playwright:browser-network-log-01'],
-          remediation: {
-            summary: 'Audit third-party frontend scripts',
-            recommended_action: 'Remove unauthorized script tag from frontend/checkout.js or declare legitimate vendor with CSP.'
-          }
-        },
-        {
-          id: 'find-002',
-          scan_id: 'default-scan',
-          type: 'vulnerability_compromised_package',
-          title: 'Compromised Transitive Dependency Detected',
-          description: 'Package event-stream@3.3.6 contains malicious code injection targeting cryptocurrency wallets and sensitive credentials (CVE-2018-3721).',
-          severity: 'critical',
-          target_node_id: 'pkg:event-stream',
-          affected_journey_ids: ['journey:checkout'],
-          evidence_references: ['manifest:package.json'],
-          security_details: {
-            cve_id: 'CVE-2018-3721',
-            cvss_score: 9.8,
-            advisory_source: 'OSV / GitHub Security Advisory',
-            fixed_version: '3.3.7'
-          },
-          remediation: {
-            summary: 'Upgrade package to non-compromised release',
-            recommended_action: 'Run `npm install event-stream@3.3.7` or remove dependency.'
-          }
-        }
-      ]);
+    } catch (err: any) {
+      console.warn('Scan invocation notice:', err);
     } finally {
       setIsScanning(false);
     }
@@ -139,10 +79,12 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#080C14] text-slate-100 flex flex-col font-sans">
-      {/* Navigation */}
+      {/* Navigation with Target Folder Selector */}
       <Navbar
         mode={mode}
         setMode={setMode}
+        targetPath={targetPath}
+        setTargetPath={setTargetPath}
         onTriggerScan={handleRunScan}
         isScanning={isScanning}
         onOpenKnowledgeModal={() => setIsKnowledgeModalOpen(true)}
@@ -158,7 +100,7 @@ export const App: React.FC = () => {
             scan={scan}
             graphData={graphData}
             findings={findings}
-            onTriggerScan={handleRunScan}
+            onTriggerScan={() => handleRunScan(targetPath)}
             isScanning={isScanning}
             onSelectFinding={setSelectedFindingForAI}
             onSelectNode={setSelectedNode}
