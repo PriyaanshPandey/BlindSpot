@@ -6,17 +6,22 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        heading: ['"Plus Jakarta Sans"', 'sans-serif'],
+        display: ['"Space Grotesk"', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+      },
       colors: {
         hdx: {
           dark: '#0B0F19',
           card: '#111827',
           surface: '#1F2937',
           border: '#374151',
-          primary: '#3B82F6',
-          accent: '#6366F1',
+          primary: '#EF4444',
+          accent: '#F43F5E',
           success: '#10B981',
           warning: '#F59E0B',
-          danger: '#EF4444',
+          danger: '#DC2626',
           solana: '#9945FF'
         }
       }

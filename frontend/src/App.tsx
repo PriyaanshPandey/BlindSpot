@@ -131,10 +131,6 @@ export const App: React.FC = () => {
     return (
       <LandingPage
         onScanFiles={handleScanFiles}
-        onExplorePreset={async (path) => {
-          setTargetPath(path);
-          await handleRunScan(path, true);
-        }}
         isScanning={isScanning}
       />
     );
