@@ -1,4 +1,4 @@
-# HIDDEN DEPENDENCY X-RAY (HDX)
+# BlindSpot
 
 > **Know what you depend on. Know what breaks. Know what it costs.**
 
@@ -32,13 +32,13 @@ Organizations suffer from a dangerous architectural blindspot: **their documente
    └───────────────────────────────┴───────────────────────────────┘
 ```
 
-**Hidden Dependency X-Ray (HDX)** is a privacy-first dependency intelligence and resilience platform. It reconciles declared architectures with live runtime observations, uncovers hidden risks, traces transitive vendor dependencies via verifiable Vendor Passports, and simulates blast-radius failures with quantified financial exposure.
+**BlindSpot** is a privacy-first dependency intelligence and resilience platform. It reconciles declared architectures with live runtime observations, uncovers hidden risks, traces transitive vendor dependencies via verifiable Vendor Passports, and simulates blast-radius failures with quantified financial exposure.
 
 ---
 
 ## Key Differentiators
 
-| Capability | Legacy Scanners / Observability | Hidden Dependency X-Ray (HDX) |
+| Capability | Legacy Scanners / Observability | BlindSpot |
 |---|---|---|
 | **Reconciliation Engine** | Scans static manifests OR traces network packets in silos. | **Direct Reconciliation**: Compares declared architecture against observed network/trace evidence to flag discrepancies. |
 | **Privacy Architecture** | Requires uploading proprietary source code or full traffic to SaaS clouds. | **Local-First Data Plane**: Proprietary source code and dependency graphs remain 100% inside your perimeter. |
