@@ -1,22 +1,29 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import uuid
 import os
 import re
 from datetime import datetime
-from app.models import ScanRequest
+import time
+
+from app.models import ScanRequest, ScanRecord, ScanStatus, ScanSummary, ScanConfig
 from app.db import db
-from app.ingestion import scan_project_directory, KNOWN_CLOUD_VENDORS
+from app.db.repositories import ScanRepository, GraphRepository, FindingRepository, EvidenceRepository
+from app.ingestion import scan_project_directory, parse_runtime_traces
 from app.security import check_vulnerabilities
+from app.graph import GraphEngine
+from app.analysis.reconciliation import DiscrepancyDetector
 
 router = APIRouter()
 
 class DirectPayloadScan(BaseModel):
     project_name: str = "Uploaded Project"
-    files: Dict[str, str] = {}
+    files: Dict[str, str] = {}  # { "package.json": "{...}", "index.html": "<...>" }
 
-def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
+URL_REGEX = re.compile(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s"\'<>)]*)?')
+
+def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
     scan_id = str(uuid.uuid4())
     project_name = project_data.get("project_name", "Target Project")
     services = project_data.get("services", {})
@@ -50,7 +57,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
     # 2. Internal Service Nodes
     service_node_ids = []
     # If multiple subservices detected, render each; else single core engine
-    active_services = {k: v for k, v in services.items() if v["dependencies"] or v["external_calls"]}
+    active_services = {k: v for k, v in services.items() if v.get("dependencies") or v.get("external_calls")}
     if not active_services:
         active_services = {"core": {"name": f"{project_name} Engine", "dependencies": overall_deps, "external_calls": observed_hosts}}
 
@@ -78,7 +85,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         # Connect dependencies to this subservice
         for pkg_name, ver in list(s_data.get("dependencies", {}).items())[:12]:
             clean_ver = str(ver).replace("^", "").replace("~", "").replace(">", "").strip()
-            is_vuln = any(v["package"] == pkg_name for v in vulns)
+            is_vuln = any(v.get("package") == pkg_name for v in vulns)
             pkg_id = f"pkg:{pkg_name}"
             
             # Avoid duplicate nodes
@@ -155,20 +162,20 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
             "id": f"find-{finding_idx:03d}",
             "scan_id": scan_id,
             "type": "vulnerability_compromised_package",
-            "title": f"Live OSV Advisory: {v['package']}@{v['version']} ({v['cve']})",
-            "description": v["description"],
-            "severity": v["severity"],
-            "target_node_id": f"pkg:{v['package']}",
+            "title": f"Live OSV Advisory: {v.get('package')}@{v.get('version')} ({v.get('cve')})",
+            "description": v.get("description", ""),
+            "severity": v.get("severity", "high"),
+            "target_node_id": f"pkg:{v.get('package')}",
             "affected_journey_ids": [journey_id],
             "evidence_references": ["manifest:package.json" if ecosystem == "npm" else "manifest:requirements.txt"],
             "security_details": {
-                "cve_id": v["cve"],
-                "cvss_score": 9.8 if v["severity"] == "critical" else 7.8,
+                "cve_id": v.get("cve"),
+                "cvss_score": 9.8 if v.get("severity") == "critical" else 7.8,
                 "advisory_source": "Google OSV Database",
                 "fixed_version": v.get("fixed_version", "latest")
             },
             "remediation": {
-                "summary": f"Upgrade {v['package']} to safe release",
+                "summary": f"Upgrade {v.get('package')} to safe release",
                 "recommended_action": f"Upgrade to {v.get('fixed_version', 'latest')} or follow security patch guidance."
             }
         })
@@ -187,7 +194,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
             "severity": "high",
             "target_node_id": f"ext:{uh}",
             "affected_journey_ids": [journey_id],
-            "evidence_references": ev_list[:3],
+            "evidence_references": ev_list[:3] if isinstance(ev_list, list) else [str(ev_list)],
             "remediation": {
                 "summary": "Verify or remove unapproved endpoint",
                 "recommended_action": f"Audit external calls to '{uh}'. Remove if unrecognized or configure Content-Security-Policy (CSP) headers."
@@ -256,19 +263,155 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
     db.in_memory_scans[scan_id] = scan_record
     return scan_record
 
-@router.post("")
+async def process_and_persist_scan(
+    project_name: str,
+    deps: Dict[str, str],
+    observed_hosts: List[str],
+    repo_path: str,
+    runtime_traces: Optional[List[Dict[str, Any]]] = None,
+    trace_file_path: Optional[str] = None
+) -> Dict[str, Any]:
+    start_time = time.time()
+    scan_id = str(uuid.uuid4())
+
+    # 1. Match vulnerabilities (Person A module)
+    vulns = check_vulnerabilities(deps)
+
+    # 2. Build Vendor Passports sample data for trusted transitivity
+    sample_passports = [
+        {
+            "vendor_id": "vendor:stripe",
+            "name": "Stripe, Inc.",
+            "subprocessors": [
+                {"provider": "AWS US-East-1", "type": "cloud_infrastructure"}
+            ]
+        }
+    ]
+
+    # 3. Construct unified graph using NetworkX engine
+    graph_engine = GraphEngine.from_evidence(
+        scan_id=scan_id,
+        project_name=project_name,
+        dependencies=deps,
+        observed_hosts=observed_hosts,
+        vulnerabilities=vulns,
+        runtime_traces=runtime_traces,
+        vendor_passports=sample_passports
+    )
+
+    # 4. Run Discrepancy & Reconciliation Detection
+    reconciler = DiscrepancyDetector(scan_id=scan_id)
+    findings = reconciler.reconcile(
+        declared_packages=deps,
+        observed_hosts=observed_hosts,
+        vulnerabilities=vulns,
+        runtime_traces=runtime_traces,
+        graph_engine=graph_engine
+    )
+
+    # 5. Build Evidence Records
+    evidence_records = []
+    # Declared evidence
+    for pkg, ver in deps.items():
+        evidence_records.append({
+            "id": f"ev:pkg:{pkg}",
+            "evidence_type": "declared",
+            "collected_at": datetime.utcnow().isoformat(),
+            "collector": "npm-manifest-parser",
+            "confidence": 1.0,
+            "declared_details": {
+                "file_path": f"{repo_path}/package.json",
+                "manifest_type": "package.json",
+                "raw_declaration": f'"{pkg}": "{ver}"'
+            }
+        })
+    # Observed evidence
+    for host in observed_hosts:
+        evidence_records.append({
+            "id": f"ev:trace:{host}",
+            "evidence_type": "observed",
+            "collected_at": datetime.utcnow().isoformat(),
+            "collector": "runtime-trace-processor",
+            "confidence": 0.95,
+            "observed_details": {
+                "source": "otel_trace",
+                "destination_host": host,
+                "protocol": "https"
+            }
+        })
+
+    # 6. Graph export to canonical dictionary
+    graph_dict = graph_engine.to_dict(filter_layer="all")
+
+    # 7. Persist to MongoDB repositories
+    await GraphRepository.save_graph(graph_dict)
+    await FindingRepository.save_findings(scan_id, findings)
+    await EvidenceRepository.save_evidence(scan_id, evidence_records)
+
+    exec_time_ms = round((time.time() - start_time) * 1000, 2)
+    discrepancy_count = sum(1 for f in findings if "discrepancy" in f.get("type", ""))
+
+    scan_record = {
+        "scan_id": scan_id,
+        "project_name": project_name,
+        "status": ScanStatus.COMPLETED.value,
+        "started_at": datetime.utcnow().isoformat(),
+        "completed_at": datetime.utcnow().isoformat(),
+        "config": {
+            "repo_path": repo_path,
+            "trace_file_path": trace_file_path,
+            "enable_playwright_crawler": False,
+            "enable_vendor_passports": True,
+            "knowledge_bundle_mode": "hybrid"
+        },
+        "summary": {
+            "declared_dependencies": len(deps),
+            "observed_dependencies": len(observed_hosts),
+            "discrepancies_found": discrepancy_count,
+            "vulnerabilities_found": len(vulns),
+            "critical_paths": 1,
+            "execution_time_ms": exec_time_ms
+        },
+        "error_message": None
+    }
+
+    await ScanRepository.save_scan(scan_record)
+    return scan_record
+
+@router.post("", status_code=202)
 async def create_scan(request: ScanRequest):
     project_scan = scan_project_directory(request.repo_path)
     if "error" in project_scan:
         raise HTTPException(status_code=400, detail=project_scan["error"])
-    return build_unified_graph(project_scan)
+
+    deps = project_scan.get("dependencies", {})
+    observed_hosts = project_scan.get("observed_hosts", [])
+    project_name = project_scan.get("project_name", "Target Project")
+
+    # Also check if trace file exists
+    runtime_traces = []
+    if request.trace_file_path:
+        runtime_traces = parse_runtime_traces(request.trace_file_path)
+        for t in runtime_traces:
+            dest = t.get("destination_host")
+            if dest and dest not in observed_hosts:
+                observed_hosts.append(dest)
+
+    return await process_and_persist_scan(
+        project_name=project_name,
+        deps=deps,
+        observed_hosts=observed_hosts,
+        repo_path=request.repo_path,
+        runtime_traces=runtime_traces,
+        trace_file_path=request.trace_file_path
+    )
 
 @router.post("/direct")
 async def scan_direct_files(payload: DirectPayloadScan):
+    """Browser upload endpoint."""
     deps = {}
     observed_hosts = set()
-    evidence_map = {}
-    URL_REGEX = re.compile(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s"\'<>)]*)?')
+    import json
 
     for fname, content in payload.files.items():
         if fname.endswith("package.json"):
@@ -289,49 +432,29 @@ async def scan_direct_files(payload: DirectPayloadScan):
                     ver = parts[1].strip() if len(parts) > 1 else "*"
                     deps[pkg] = ver
 
-        if ".env" in fname or fname.endswith(".env"):
-            for line in content.splitlines():
-                clean_line = line.strip()
-                if not clean_line or clean_line.startswith("#"):
-                    continue
-                upper = clean_line.upper()
-                for key, info in KNOWN_CLOUD_VENDORS.items():
-                    if key.upper() in upper:
-                        observed_hosts.add(info["host"])
-                        evidence_map.setdefault(info["host"], []).append(f"{fname}: {clean_line.split('=')[0]}")
-
+        # Search for external URLs in content
         matches = URL_REGEX.findall(content)
         for m in matches:
             host_match = re.search(r'https?://([^/:\s]+)', m)
             if host_match:
                 host = host_match.group(1).lower()
-                if not host.startswith(("localhost", "127.0.0.1")) and not host.endswith(("schema.org", "w3.org")):
+                if not host.startswith("localhost") and not host.startswith("127.0.0.1") and not host.endswith("schema.org") and not host.endswith("w3.org"):
                     observed_hosts.add(host)
-                    evidence_map.setdefault(host, []).append(fname)
 
-    project_data = {
-        "project_name": payload.project_name,
-        "folder_path": "Browser Upload",
-        "services": {
-            "core": {
-                "name": f"{payload.project_name} Core",
-                "dependencies": deps,
-                "external_calls": observed_hosts,
-                "ecosystem": "npm"
-            }
-        },
-        "dependencies": deps,
-        "observed_hosts": list(observed_hosts),
-        "evidence_records": evidence_map
-    }
-    return build_unified_graph(project_data)
+    return await process_and_persist_scan(
+        project_name=payload.project_name,
+        deps=deps,
+        observed_hosts=list(observed_hosts),
+        repo_path="Browser Upload"
+    )
 
 @router.get("")
 async def list_scans():
-    return list(db.in_memory_scans.values())
+    return await ScanRepository.list_scans()
 
 @router.get("/{scan_id}")
 async def get_scan(scan_id: str):
-    if scan_id in db.in_memory_scans:
-        return db.in_memory_scans[scan_id]
+    scan = await ScanRepository.get_scan(scan_id)
+    if scan:
+        return scan
     raise HTTPException(status_code=404, detail="Scan not found")
