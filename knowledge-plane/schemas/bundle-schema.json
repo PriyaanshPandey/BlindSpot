@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HDXKnowledgeBundleSchema",
+  "type": "object",
+  "required": ["bundle_id", "version", "published_at", "ed25519_signature", "advisories", "vendor_passports"],
+  "properties": {
+    "bundle_id": { "type": "string" },
+    "version": { "type": "string" },
+    "published_at": { "type": "string", "format": "date-time" },
+    "ed25519_signature": { "type": "string" },
+    "solana_tx_anchor": { "type": "string" },
+    "advisories": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "vendor_passports": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  }
+}
+

@@ -1,0 +1,10 @@
+{
+  "name": "nexus/commerce-backend",
+  "description": "Legacy microservice components for Nexus Commerce",
+  "type": "project",
+  "require": {
+    "php": ">=8.1",
+    "guzzlehttp/guzzle": "^7.8"
+  }
+}
+

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HDXEvidenceSchema",
+  "description": "Evidence records supporting relationships and nodes in the HDX Graph",
+  "type": "object",
+  "required": ["id", "evidence_type", "collected_at", "confidence"],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "evidence_type": {
+      "type": "string",
+      "enum": ["declared", "observed", "deployed", "vendor_passport"]
+    },
+    "collected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "collector": {
+      "type": "string",
+      "description": "Name of the scanner or collector module (e.g. npm-manifest-parser, otel-trace-ingestor, playwright-crawler)"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "declared_details": {
+      "type": "object",
+      "properties": {
+        "file_path": { "type": "string" },
+        "line_number": { "type": "integer" },
+        "manifest_type": { "type": "string" },
+        "raw_declaration": { "type": "string" }
+      }
+    },
+    "observed_details": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "enum": ["otel_trace", "dns_log", "proxy_access_log", "playwright_crawler"] },
+        "endpoint": { "type": "string" },
+        "destination_host": { "type": "string" },
+        "protocol": { "type": "string" },
+        "method": { "type": "string" },
+        "trace_id": { "type": "string" },
+        "span_id": { "type": "string" },
+        "frequency_count": { "type": "integer" }
+      }
+    },
+    "deployed_details": {
+      "type": "object",
+      "properties": {
+        "platform": { "type": "string" },
+        "container_image": { "type": "string" },
+        "image_digest": { "type": "string" },
+        "resource_arn": { "type": "string" },
+        "env_variables": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "vendor_passport_details": {
+      "type": "object",
+      "properties": {
+        "vendor_name": { "type": "string" },
+        "passport_version": { "type": "string" },
+        "public_key_fingerprint": { "type": "string" },
+        "signature_valid": { "type": "boolean" },
+        "solana_tx_anchor": { "type": "string" }
+      }
+    }
+  }
+}
+

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HDXScenarioSchema",
+  "description": "Schema for Failure Simulation and Financial Impact Estimation",
+  "type": "object",
+  "required": ["scenario_id", "scan_id", "target_node_id", "simulation_parameters"],
+  "properties": {
+    "scenario_id": { "type": "string", "format": "uuid" },
+    "scan_id": { "type": "string", "format": "uuid" },
+    "name": { "type": "string" },
+    "target_node_id": { "type": "string" },
+    "simulation_parameters": {
+      "type": "object",
+      "required": ["failure_duration_hours"],
+      "properties": {
+        "failure_type": {
+          "type": "string",
+          "enum": ["complete_outage", "high_latency_timeout", "packet_loss", "security_quarantine"]
+        },
+        "failure_duration_hours": { "type": "number", "minimum": 0.1 },
+        "hourly_transactions_override": { "type": ["number", "null"] },
+        "average_transaction_value_override": { "type": ["number", "null"] }
+      }
+    },
+    "impact_results": {
+      "type": "object",
+      "properties": {
+        "blast_radius_node_count": { "type": "integer" },
+        "impacted_node_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "impacted_journeys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["journey_id", "name", "disruption_fraction", "financial_exposure"],
+            "properties": {
+              "journey_id": { "type": "string" },
+              "name": { "type": "string" },
+              "disruption_fraction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+              "hourly_transactions": { "type": "number" },
+              "average_transaction_value": { "type": "number" },
+              "financial_exposure": { "type": "number" }
+            }
+          }
+        },
+        "total_estimated_gross_exposure": { "type": "number" },
+        "exposure_currency": { "type": "string", "default": "USD" },
+        "mitigation_strategies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "strategy_type": {
+                "type": "string",
+                "enum": ["circuit_breaker", "fallback_provider", "retry_backoff", "offline_queue", "redundant_dns"]
+              },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "estimated_risk_reduction_pct": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+

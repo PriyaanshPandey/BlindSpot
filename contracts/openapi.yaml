@@ -1,0 +1,200 @@
+openapi: 3.1.0
+info:
+  title: Hidden Dependency X-Ray (HDX) API
+  version: 1.0.0
+  description: Privacy-first dependency intelligence and resilience platform API.
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local Data Plane API
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "ok" }
+                  version: { type: string, example: "1.0.0" }
+                  operating_mode: { type: string, example: "hybrid" }
+
+  /scans:
+    post:
+      summary: Trigger a new dependency discovery scan
+      operationId: createScan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [repo_path]
+              properties:
+                repo_path: { type: string, example: "./demo/nexus-commerce" }
+                trace_file_path: { type: string, example: "./fixtures/runtime/traces.sample.json" }
+                enable_vendor_passports: { type: boolean, default: true }
+      responses:
+        '202':
+          description: Scan accepted and running
+          content:
+            application/json:
+              schema:
+                $ref: './scan-schema.json'
+
+    get:
+      summary: List all previous scans
+      operationId: listScans
+      responses:
+        '200':
+          description: List of scans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: './scan-schema.json'
+
+  /scans/{scan_id}:
+    get:
+      summary: Get details and status of a scan
+      operationId: getScan
+      parameters:
+        - name: scan_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Scan details
+          content:
+            application/json:
+              schema:
+                $ref: './scan-schema.json'
+
+  /scans/{scan_id}/graph:
+    get:
+      summary: Get the unified dependency graph
+      operationId: getScanGraph
+      parameters:
+        - name: scan_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: filter_layer
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, declared_only, observed_only, discrepancies_only]
+      responses:
+        '200':
+          description: Unified Dependency Graph nodes and edges
+          content:
+            application/json:
+              schema:
+                $ref: './graph-schema.json'
+
+  /scans/{scan_id}/findings:
+    get:
+      summary: Get discrepancy and vulnerability findings
+      operationId: getScanFindings
+      parameters:
+        - name: scan_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Array of findings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: './finding-schema.json'
+
+  /scans/{scan_id}/simulate:
+    post:
+      summary: Run a failure simulation on a specific dependency node
+      operationId: runFailureSimulation
+      parameters:
+        - name: scan_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_node_id, failure_duration_hours]
+              properties:
+                target_node_id: { type: string, example: "vendor:stripe" }
+                failure_type: { type: string, default: "complete_outage" }
+                failure_duration_hours: { type: number, default: 4.0 }
+                hourly_transactions_override: { type: number }
+                average_transaction_value_override: { type: number }
+      responses:
+        '200':
+          description: Simulation blast radius and business financial impact
+          content:
+            application/json:
+              schema:
+                $ref: './scenario-schema.json'
+
+  /knowledge/bundle:
+    get:
+      summary: Fetch and verify current signed knowledge bundle
+      operationId: getKnowledgeBundle
+      responses:
+        '200':
+          description: Signed public knowledge bundle with verification status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bundle_id: { type: string }
+                  version: { type: string }
+                  published_at: { type: string, format: date-time }
+                  signature_valid: { type: boolean }
+                  solana_hash: { type: string }
+                  advisories_count: { type: integer }
+                  vendor_passports_count: { type: integer }
+
+  /ai/enrich-vendor:
+    post:
+      summary: Enrich vendor dependencies using Gemini AI
+      operationId: enrichVendorWithGemini
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor_domain]
+              properties:
+                vendor_domain: { type: string, example: "stripe.com" }
+      responses:
+        '200':
+          description: Extracted public dependencies for vendor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vendor: { type: string }
+                  disclosed_subprocessors:
+                    type: array
+                    items: { type: string }
+                  sources:
+                    type: array
+                    items: { type: string }
+

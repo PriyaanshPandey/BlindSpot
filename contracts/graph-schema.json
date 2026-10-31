@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HDXGraphSchema",
+  "description": "Unified Dependency Graph schema for Hidden Dependency X-Ray",
+  "type": "object",
+  "required": ["scan_id", "created_at", "nodes", "edges"],
+  "properties": {
+    "scan_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "target_name": { "type": "string" },
+        "total_nodes": { "type": "integer" },
+        "total_edges": { "type": "integer" },
+        "discrepancy_count": { "type": "integer" },
+        "vulnerability_count": { "type": "integer" }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": [
+              "application",
+              "internal_service",
+              "external_api",
+              "vendor",
+              "software_package",
+              "runtime_component",
+              "infrastructure_resource",
+              "business_journey"
+            ]
+          },
+          "subtype": { "type": "string" },
+          "version": { "type": ["string", "null"] },
+          "provenance": {
+            "type": "string",
+            "enum": ["declared", "observed", "deployed", "inferred", "disclosed"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["healthy", "warning", "compromised", "unreachable", "unknown"]
+          },
+          "criticality": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"]
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "source", "target", "relation"],
+        "properties": {
+          "id": { "type": "string" },
+          "source": { "type": "string" },
+          "target": { "type": "string" },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "depends_on",
+              "calls_api",
+              "transitive_dependency",
+              "hosted_on",
+              "authenticates_via",
+              "powers_journey",
+              "routes_traffic_to"
+            ]
+          },
+          "provenance": {
+            "type": "string",
+            "enum": ["declared", "observed", "deployed", "vendor_passport"]
+          },
+          "confidence_score": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}
+

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HDXFindingSchema",
+  "description": "Schema for discrepancy and vulnerability findings discovered by HDX",
+  "type": "object",
+  "required": ["id", "scan_id", "type", "title", "severity", "target_node_id"],
+  "properties": {
+    "id": { "type": "string" },
+    "scan_id": { "type": "string", "format": "uuid" },
+    "type": {
+      "type": "string",
+      "enum": [
+        "discrepancy_undeclared_endpoint",
+        "discrepancy_phantom_dependency",
+        "discrepancy_version_drift",
+        "vulnerability_known_cve",
+        "vulnerability_compromised_package",
+        "vendor_unverified_passport",
+        "single_point_of_failure"
+      ]
+    },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low", "info"]
+    },
+    "target_node_id": { "type": "string" },
+    "affected_journey_ids": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "evidence_references": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "security_details": {
+      "type": "object",
+      "properties": {
+        "cve_id": { "type": "string" },
+        "cvss_score": { "type": "number" },
+        "advisory_source": { "type": "string" },
+        "fixed_version": { "type": ["string", "null"] }
+      }
+    },
+    "remediation": {
+      "type": "object",
+      "properties": {
+        "summary": { "type": "string" },
+        "recommended_action": { "type": "string" },
+        "code_patch": { "type": ["string", "null"] },
+        "doc_update_sample": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
+

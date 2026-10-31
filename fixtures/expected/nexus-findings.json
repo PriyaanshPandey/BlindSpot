@@ -1,0 +1,16 @@
+[
+  {
+    "finding_type": "discrepancy_undeclared_endpoint",
+    "endpoint": "telemetry.untrusted-cdn.net",
+    "expected_severity": "high",
+    "rule": "OBSERVED_NOT_DECLARED"
+  },
+  {
+    "finding_type": "vulnerability_compromised_package",
+    "package": "event-stream",
+    "version": "3.3.6",
+    "cve": "CVE-2018-3721",
+    "expected_severity": "critical"
+  }
+]
+

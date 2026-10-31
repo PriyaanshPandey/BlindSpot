@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  nexus-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - STRIPE_PUBLIC_KEY=pk_test_sample123
+      - AUTH0_DOMAIN=nexus-auth.us.auth0.com
+
+  mongodb:
+    image: mongo:7.0
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
+

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HDXScanSchema",
+  "description": "Schema for Scan configuration, execution, and scan summaries",
+  "type": "object",
+  "required": ["scan_id", "status", "started_at"],
+  "properties": {
+    "scan_id": { "type": "string", "format": "uuid" },
+    "project_name": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "parsing_manifests", "ingesting_traces", "reconciling", "analyzing_risks", "completed", "failed"]
+    },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+    "config": {
+      "type": "object",
+      "properties": {
+        "repo_path": { "type": "string" },
+        "trace_file_path": { "type": ["string", "null"] },
+        "enable_playwright_crawler": { "type": "boolean" },
+        "enable_vendor_passports": { "type": "boolean" },
+        "knowledge_bundle_mode": { "type": "string", "enum": ["vault", "hybrid"] }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "declared_dependencies": { "type": "integer" },
+        "observed_dependencies": { "type": "integer" },
+        "discrepancies_found": { "type": "integer" },
+        "vulnerabilities_found": { "type": "integer" },
+        "critical_paths": { "type": "integer" },
+        "execution_time_ms": { "type": "number" }
+      }
+    },
+    "error_message": { "type": ["string", "null"] }
+  }
+}
+

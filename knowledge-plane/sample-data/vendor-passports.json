@@ -1,0 +1,38 @@
+[
+  {
+    "vendor_id": "vendor:stripe",
+    "name": "Stripe, Inc.",
+    "domain": "stripe.com",
+    "passport_version": "1.0.0",
+    "disclosed_upstream_dependencies": [
+      {
+        "provider": "Amazon Web Services (AWS)",
+        "service": "Compute & Data Stores (us-east-1)",
+        "criticality": "high"
+      },
+      {
+        "provider": "Cloudflare",
+        "service": "DDoS Mitigation & Edge Routing",
+        "criticality": "high"
+      }
+    ],
+    "ed25519_signature": "MEUCIQD...sample_sig...AiEA",
+    "solana_anchor_hash": "8u9V...devnet...3k1"
+  },
+  {
+    "vendor_id": "vendor:auth0",
+    "name": "Auth0 by Okta",
+    "domain": "auth0.com",
+    "passport_version": "1.0.0",
+    "disclosed_upstream_dependencies": [
+      {
+        "provider": "Amazon Web Services (AWS)",
+        "service": "Global Identity Services",
+        "criticality": "critical"
+      }
+    ],
+    "ed25519_signature": "MEQ...sample_sig...OK",
+    "solana_anchor_hash": "2k8M...devnet...9yT"
+  }
+]
+
