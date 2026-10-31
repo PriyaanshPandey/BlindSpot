@@ -1,34 +1,33 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from pydantic import BaseModel
+from typing import Optional, Dict, Any, List
 import uuid
 import os
+import re
 from datetime import datetime
 from app.models import ScanRequest
 from app.db import db
-from app.ingestion import scan_project_directory, parse_runtime_traces
+from app.ingestion import scan_project_directory
 from app.security import check_vulnerabilities
 
 router = APIRouter()
 
-@router.post("")
-async def create_scan(request: ScanRequest):
+class DirectPayloadScan(BaseModel):
+    project_name: str = "Uploaded Project"
+    files: Dict[str, str] = {}  # { "package.json": "{...}", "index.html": "<...>" }
+
+URL_REGEX = re.compile(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s"\'<>)]*)?')
+
+def build_graph_and_findings(project_name: str, deps: Dict[str, str], observed_hosts: List[str], folder_label: str) -> tuple:
     scan_id = str(uuid.uuid4())
-    
-    # Run dynamic folder scan
-    project_scan = scan_project_directory(request.repo_path)
-    if "error" in project_scan:
-        raise HTTPException(status_code=400, detail=project_scan["error"])
-
-    deps = project_scan.get("dependencies", {})
-    observed_hosts = project_scan.get("observed_hosts", [])
     vulns = check_vulnerabilities(deps)
-    project_name = project_scan.get("project_name", "Target Project")
 
-    # 1. Build Dynamic Graph Nodes
     nodes = []
     edges = []
 
     # App root node
-    app_id = f"app:{project_name.lower().replace(' ', '-')}"
+    clean_name = project_name.replace(" ", "-").lower()
+    app_id = f"app:{clean_name}"
     nodes.append({
         "id": app_id,
         "label": f"{project_name} (App)",
@@ -36,11 +35,11 @@ async def create_scan(request: ScanRequest):
         "provenance": "declared",
         "status": "healthy",
         "criticality": "critical",
-        "metadata": {"path": request.repo_path}
+        "metadata": {"path": folder_label}
     })
 
     # Internal core service
-    service_id = f"service:{project_name.lower().replace(' ', '-')}-core"
+    service_id = f"service:{clean_name}-core"
     nodes.append({
         "id": service_id,
         "label": f"{project_name} Core Engine",
@@ -58,10 +57,10 @@ async def create_scan(request: ScanRequest):
         "confidence_score": 1.0
     })
 
-    # Package nodes (up to 12 main dependencies for clean visual display)
+    # Package nodes
     edge_idx = 1
-    for pkg_name, ver in list(deps.items())[:12]:
-        clean_ver = ver.replace("^", "").replace("~", "").strip()
+    for pkg_name, ver in list(deps.items())[:15]:
+        clean_ver = str(ver).replace("^", "").replace("~", "").replace(">", "").strip()
         is_vuln = any(v["package"] == pkg_name for v in vulns)
         pkg_id = f"pkg:{pkg_name}"
         nodes.append({
@@ -84,15 +83,14 @@ async def create_scan(request: ScanRequest):
         edge_idx += 1
 
     # External APIs / Observed Hosts
-    # Check for known vendors
     vendor_known = False
-    for host in observed_hosts:
+    for host in observed_hosts[:15]:
         is_known_vendor = any(v in host for v in ["stripe.com", "auth0.com", "twilio.com", "sendgrid.com", "firebase", "aws", "cloudflare"])
         host_id = f"ext:{host}"
         node_type = "vendor" if is_known_vendor else "external_api"
         status = "healthy" if is_known_vendor else "warning"
         provenance = "declared" if is_known_vendor else "observed"
-        
+
         nodes.append({
             "id": host_id,
             "label": host,
@@ -110,11 +108,10 @@ async def create_scan(request: ScanRequest):
             "confidence_score": 0.99
         })
         edge_idx += 1
-
         if is_known_vendor and "stripe" in host:
             vendor_known = True
 
-    # Ensure a journey node is linked
+    # Business journey node
     journey_id = "journey:main_flow"
     nodes.append({
         "id": journey_id,
@@ -133,7 +130,6 @@ async def create_scan(request: ScanRequest):
         "confidence_score": 1.0
     })
 
-    # If Stripe or payment vendor is observed, link it to the journey
     if vendor_known:
         edges.append({
             "id": f"e_stripe_journey",
@@ -144,22 +140,20 @@ async def create_scan(request: ScanRequest):
             "confidence_score": 1.0
         })
 
-    # 2. Build Dynamic Findings
+    # Build findings
     findings = []
     finding_idx = 1
-
-    # Vulnerability findings
     for v in vulns:
         findings.append({
             "id": f"find-{finding_idx:03d}",
             "scan_id": scan_id,
             "type": "vulnerability_compromised_package",
-            "title": f"Vulnerable Dependency Detected: {v['package']}@{v['version']}",
+            "title": f"Vulnerable Dependency: {v['package']}@{v['version']}",
             "description": v["description"],
             "severity": v["severity"],
             "target_node_id": f"pkg:{v['package']}",
             "affected_journey_ids": [journey_id],
-            "evidence_references": [f"manifest:package.json"],
+            "evidence_references": ["manifest:package.json"],
             "security_details": {
                 "cve_id": v["cve"],
                 "cvss_score": 9.8 if v["severity"] == "critical" else 7.5,
@@ -173,7 +167,6 @@ async def create_scan(request: ScanRequest):
         })
         finding_idx += 1
 
-    # Discrepancy findings for unverified third-party hosts
     undeclared_hosts = [h for h in observed_hosts if not any(v in h for v in ["stripe.com", "auth0.com", "github.com", "npmjs.org", "w3.org", "google.com"])]
     for uh in undeclared_hosts:
         findings.append({
@@ -181,19 +174,19 @@ async def create_scan(request: ScanRequest):
             "scan_id": scan_id,
             "type": "discrepancy_undeclared_endpoint",
             "title": f"Undocumented External Connection: {uh}",
-            "description": f"Source code analysis detected network connection to '{uh}' which is not documented in architecture declarations.",
+            "description": f"Source code analysis detected network connection to '{uh}' which is absent from architectural declarations.",
             "severity": "high",
             "target_node_id": f"ext:{uh}",
             "affected_journey_ids": [journey_id],
             "evidence_references": [f"code_reference:{uh}"],
             "remediation": {
-                "summary": "Verify or remove third-party connection",
+                "summary": "Verify or remove unapproved endpoint",
                 "recommended_action": f"Remove unapproved endpoint '{uh}' or configure Content-Security-Policy (CSP) headers."
             }
         })
         finding_idx += 1
 
-    # Store in memory
+    # Save to database
     db.in_memory_graphs[scan_id] = {
         "scan_id": scan_id,
         "created_at": datetime.utcnow().isoformat(),
@@ -225,6 +218,59 @@ async def create_scan(request: ScanRequest):
     }
     db.in_memory_scans[scan_id] = scan_record
     return scan_record
+
+@router.post("")
+async def create_scan(request: ScanRequest):
+    project_scan = scan_project_directory(request.repo_path)
+    if "error" in project_scan:
+        raise HTTPException(status_code=400, detail=project_scan["error"])
+
+    deps = project_scan.get("dependencies", {})
+    observed_hosts = project_scan.get("observed_hosts", [])
+    project_name = project_scan.get("project_name", "Target Project")
+
+    return build_graph_and_findings(project_name, deps, observed_hosts, request.repo_path)
+
+@router.post("/direct")
+async def scan_direct_files(payload: DirectPayloadScan):
+    """
+    Direct browser-uploaded files scan:
+    Accepts extracted files (package.json, requirements.txt, html, js) from the browser.
+    """
+    deps = {}
+    observed_hosts = set()
+    import json
+
+    # 1. Parse package.json if present
+    for fname, content in payload.files.items():
+        if fname.endswith("package.json"):
+            try:
+                pkg_data = json.loads(content)
+                d = {**pkg_data.get("dependencies", {}), **pkg_data.get("devDependencies", {})}
+                deps.update(d)
+                if pkg_data.get("name"):
+                    payload.project_name = pkg_data["name"]
+            except Exception:
+                pass
+        elif fname.endswith("requirements.txt"):
+            for line in content.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    parts = re.split(r'==|>=|<=|~=', line)
+                    pkg = parts[0].strip()
+                    ver = parts[1].strip() if len(parts) > 1 else "*"
+                    deps[pkg] = ver
+
+        # Search for external URLs in content
+        matches = URL_REGEX.findall(content)
+        for m in matches:
+            host_match = re.search(r'https?://([^/:\s]+)', m)
+            if host_match:
+                host = host_match.group(1).lower()
+                if not host.startswith("localhost") and not host.startswith("127.0.0.1") and not host.endswith("schema.org") and not host.endswith("w3.org"):
+                    observed_hosts.add(host)
+
+    return build_graph_and_findings(payload.project_name, deps, list(observed_hosts), "Browser Upload")
 
 @router.get("")
 async def list_scans():

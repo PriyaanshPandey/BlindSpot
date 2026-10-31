@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import cytoscape, { Core, EventObject } from 'cytoscape';
+import { ZoomIn, ZoomOut, Maximize2, RotateCcw, Info } from 'lucide-react';
 import { GraphData, GraphNode } from '../types';
 
 interface GraphExplorerProps {
@@ -23,7 +24,6 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
   useEffect(() => {
     if (!containerRef.current || !graphData) return;
 
-    // Filter nodes/edges based on filterLayer
     let activeNodes = graphData.nodes;
     let activeEdges = graphData.edges;
 
@@ -74,6 +74,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
             'label': 'data(label)',
             'color': '#E2E8F0',
             'font-size': '11px',
+            'font-weight': 'bold',
             'text-valign': 'bottom',
             'text-margin-y': 6,
             'background-color': '#1E293B',
@@ -81,41 +82,43 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
             'border-color': '#475569',
             'width': 44,
             'height': 44,
-            'transition-property': 'background-color, border-color, width, height, line-color',
+            'transition-property': 'background-color, border-color, width, height',
             'transition-duration': 0.3
           }
         },
-        // Node Type Styling
+        // Node Type Specific Shapes
         {
           selector: 'node[type = "application"]',
           style: {
             'shape': 'round-rectangle',
-            'background-color': '#1D4ED8',
-            'border-color': '#3B82F6'
+            'background-color': '#2563EB',
+            'border-color': '#60A5FA',
+            'width': 54,
+            'height': 54
           }
         },
         {
           selector: 'node[type = "internal_service"]',
           style: {
             'shape': 'round-rectangle',
-            'background-color': '#4338CA',
-            'border-color': '#6366F1'
+            'background-color': '#4F46E5',
+            'border-color': '#818CF8'
           }
         },
         {
           selector: 'node[type = "vendor"]',
           style: {
             'shape': 'hexagon',
-            'background-color': '#6D28D9',
-            'border-color': '#8B5CF6'
+            'background-color': '#7C3AED',
+            'border-color': '#A78BFA'
           }
         },
         {
           selector: 'node[type = "external_api"]',
           style: {
             'shape': 'diamond',
-            'background-color': '#B45309',
-            'border-color': '#F59E0B'
+            'background-color': '#D97706',
+            'border-color': '#FBBF24'
           }
         },
         {
@@ -127,19 +130,13 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           }
         },
         {
-          selector: 'node[type = "infrastructure_resource"]',
-          style: {
-            'shape': 'round-diamond',
-            'background-color': '#0E7490',
-            'border-color': '#06B6D4'
-          }
-        },
-        {
           selector: 'node[type = "business_journey"]',
           style: {
             'shape': 'star',
-            'background-color': '#047857',
-            'border-color': '#10B981'
+            'background-color': '#059669',
+            'border-color': '#34D399',
+            'width': 50,
+            'height': 50
           }
         },
         // Provenance & Status Styling
@@ -154,7 +151,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         {
           selector: 'node[status = "compromised"]',
           style: {
-            'background-color': '#991B1B',
+            'background-color': '#DC2626',
             'border-color': '#EF4444',
             'border-width': 3
           }
@@ -192,7 +189,8 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           style: {
             'line-style': 'dotted',
             'line-color': '#10B981',
-            'target-arrow-color': '#10B981'
+            'target-arrow-color': '#10B981',
+            'width': 3
           }
         },
         // Selection
@@ -249,9 +247,61 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
     });
   }, [blastRadiusIds]);
 
+  const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.25);
+  const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
+  const handleFit = () => cyRef.current?.fit(undefined, 40);
+  const handleReset = () => {
+    if (!cyRef.current) return;
+    cyRef.current.layout({
+      name: 'breadthfirst',
+      directed: true,
+      padding: 50,
+      spacingFactor: 1.4
+    }).run();
+  };
+
   return (
     <div className="relative w-full h-full bg-[#080C14]">
+      {/* Cytoscape DOM container */}
       <div ref={containerRef} className="cytoscape-container" />
+
+      {/* Floating Canvas Controls */}
+      <div className="absolute top-4 right-4 z-20 flex flex-col gap-1.5 bg-slate-900/90 border border-slate-700/80 p-1.5 rounded-xl shadow-xl backdrop-blur-md">
+        <button
+          onClick={handleZoomIn}
+          className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-all"
+          title="Zoom In"
+        >
+          <ZoomIn className="w-4 h-4" />
+        </button>
+        <button
+          onClick={handleZoomOut}
+          className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-all"
+          title="Zoom Out"
+        >
+          <ZoomOut className="w-4 h-4" />
+        </button>
+        <button
+          onClick={handleFit}
+          className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-all"
+          title="Fit View"
+        >
+          <Maximize2 className="w-4 h-4" />
+        </button>
+        <button
+          onClick={handleReset}
+          className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-all"
+          title="Reset Layout"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Floating Instructions Pill */}
+      <div className="absolute top-4 left-4 z-10 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-300 flex items-center gap-2 shadow-lg backdrop-blur-md">
+        <Info className="w-4 h-4 text-blue-400 shrink-0" />
+        <span>Click any node to inspect evidence or simulate component failure</span>
+      </div>
 
       {/* Legend overlay */}
       <div className="absolute bottom-4 left-4 z-10 bg-slate-900/90 backdrop-blur-md p-3 rounded-xl border border-slate-800 text-[11px] text-slate-300 flex flex-wrap gap-x-4 gap-y-2 max-w-lg shadow-lg">
@@ -261,7 +311,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded bg-indigo-600"></span>
-          <span>Internal Service</span>
+          <span>Service</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded bg-purple-600"></span>
@@ -269,15 +319,15 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded bg-amber-500 border border-amber-400 border-dashed"></span>
-          <span>Observed (Discrepancy)</span>
+          <span>Observed Endpoint</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded bg-emerald-600"></span>
-          <span>Business Journey</span>
+          <span>Journey</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded bg-rose-600 animate-pulse"></span>
-          <span>Blast Radius / Vulnerable</span>
+          <span>Compromised / Blast Radius</span>
         </div>
       </div>
     </div>

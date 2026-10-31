@@ -20,7 +20,26 @@ export async function createScan(repoPath: string = './demo/nexus-commerce'): Pr
       enable_vendor_passports: true
     })
   });
-  if (!res.ok) throw new Error(`Scan trigger failed: ${res.statusText}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(errText || `Scan trigger failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function scanUploadedFiles(projectName: string, files: Record<string, string>): Promise<ScanSummary> {
+  const res = await fetch(`${API_BASE}/scans/direct`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_name: projectName,
+      files
+    })
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(errText || `Direct file scan failed: ${res.statusText}`);
+  }
   return res.json();
 }
 
@@ -71,7 +90,7 @@ export async function previewAIPayload(finding: Finding, audience: 'builder' | '
     body: JSON.stringify({
       finding_id: finding.id,
       title: finding.title,
-      package_name: finding.target_node_id.replace('pkg:', ''),
+      package_name: finding.target_node_id.replace('pkg:', '').replace('ext:', ''),
       cve_id: finding.security_details?.cve_id,
       severity: finding.severity,
       audience
@@ -92,7 +111,7 @@ export async function explainFindingAI(
     body: JSON.stringify({
       finding_id: finding.id,
       title: finding.title,
-      package_name: finding.target_node_id.replace('pkg:', ''),
+      package_name: finding.target_node_id.replace('pkg:', '').replace('ext:', ''),
       cve_id: finding.security_details?.cve_id,
       severity: finding.severity,
       audience,
@@ -118,4 +137,3 @@ export async function verifyKnowledgeBundle(simulateTamper: boolean = false): Pr
   if (!res.ok) throw new Error(`Bundle verification failed: ${res.statusText}`);
   return res.json();
 }
-
