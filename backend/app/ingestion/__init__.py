@@ -17,19 +17,24 @@ IMPORT_REGEX = re.compile(r"(?:import\s+.*?from\s+['\"]([^'\"./][^'\"]*)['\"]|re
 EXCLUDED_DIRS = {".git", "node_modules", "dist", "build", ".venv", "venv", "__pycache__", ".idea", ".vscode", "coverage"}
 
 KNOWN_CLOUD_VENDORS = {
-    "firebase": {"vendor": "Firebase (Google Cloud)", "host": "firebase.google.com", "category": "auth_database", "upstream": ["google-cloud-us-central1"]},
+    "firebase": {"vendor": "Firebase (Google Cloud)", "host": "firebase.google.com", "category": "backend_platform", "upstream": ["google-cloud-us-central1"]},
     "razorpay": {"vendor": "Razorpay Payments", "host": "api.razorpay.com", "category": "payment_gateway", "upstream": ["aws-ap-south-1", "cloudflare-edge"]},
     "stripe": {"vendor": "Stripe Payments", "host": "api.stripe.com", "category": "payment_gateway", "upstream": ["aws-us-east-1", "cloudflare-edge"]},
     "paypal": {"vendor": "PayPal Payments", "host": "api.paypal.com", "category": "payment_gateway", "upstream": ["azure-eastus", "fastly-cdn"]},
     "supabase": {"vendor": "Supabase Platform", "host": "supabase.co", "category": "database_backend", "upstream": ["aws-eu-central-1"]},
     "openai": {"vendor": "OpenAI API", "host": "api.openai.com", "category": "ai_inference", "upstream": ["azure-openai-eastus"]},
     "gemini": {"vendor": "Google Gemini AI", "host": "generativelanguage.googleapis.com", "category": "ai_inference", "upstream": ["google-tpu-cluster"]},
+    "groq": {"vendor": "Groq AI Cloud", "host": "api.groq.com", "category": "ai_inference", "upstream": ["aws-us-east-1"]},
     "rapidapi": {"vendor": "RapidAPI Gateway", "host": "rapidapi.com", "category": "api_marketplace", "upstream": ["aws-us-east-1", "cloudflare-edge"]},
-    "jsearch": {"vendor": "JSearch (RapidAPI)", "host": "jsearch.p.rapidapi.com", "category": "external_api", "upstream": ["rapidapi.com"]},
+    "jsearch": {"vendor": "RapidAPI Gateway", "host": "rapidapi.com", "category": "api_marketplace", "upstream": ["aws-us-east-1"]},
     "auth0": {"vendor": "Auth0 Identity", "host": "auth0.com", "category": "identity_provider", "upstream": ["aws-global-idp", "fastly-cdn"]},
+    "clerk": {"vendor": "Clerk Authentication", "host": "clerk.dev", "category": "identity_provider", "upstream": ["aws-us-east-1", "cloudflare-edge"]},
+    "linkedin": {"vendor": "LinkedIn OAuth / API", "host": "api.linkedin.com", "category": "identity_provider", "upstream": ["azure-eastus"]},
+    "github": {"vendor": "GitHub API", "host": "api.github.com", "category": "developer_platform", "upstream": ["azure-eastus", "fastly-cdn"]},
     "twilio": {"vendor": "Twilio Communications", "host": "api.twilio.com", "category": "telecom_sms", "upstream": ["aws-us-east-1"]},
     "sendgrid": {"vendor": "Twilio SendGrid", "host": "api.sendgrid.com", "category": "email_dispatch", "upstream": ["aws-us-east-1"]},
     "postmark": {"vendor": "Postmark Email", "host": "api.postmarkapp.com", "category": "email_dispatch", "upstream": ["aws-us-east-1"]},
+    "resend": {"vendor": "Resend Email", "host": "api.resend.com", "category": "email_dispatch", "upstream": ["aws-us-east-1"]},
     "sentry": {"vendor": "Sentry Error Monitoring", "host": "sentry.io", "category": "observability", "upstream": ["google-cloud-us-central1"]},
     "mixpanel": {"vendor": "Mixpanel Analytics", "host": "api.mixpanel.com", "category": "product_analytics", "upstream": ["google-cloud-us-central1"]},
     "segment": {"vendor": "Segment Analytics", "host": "telemetry.segment.io", "category": "product_analytics", "upstream": ["aws-us-west-2"]},
@@ -37,12 +42,18 @@ KNOWN_CLOUD_VENDORS = {
     "veriff": {"vendor": "Veriff KYC", "host": "api.veriff.com", "category": "identity_kyc", "upstream": ["aws-eu-west-1"]},
     "plaid": {"vendor": "Plaid Banking", "host": "api.plaid.com", "category": "fintech_banking", "upstream": ["aws-us-east-1"]},
     "sift": {"vendor": "Sift Fraud Prevention", "host": "api.sift.com", "category": "fraud_security", "upstream": ["aws-us-west-2"]},
-    "mongodb": {"vendor": "MongoDB Database", "host": "mongodb-cluster", "category": "database", "upstream": []},
-    "redis": {"vendor": "Redis Cache / Queue", "host": "redis-cluster", "category": "cache_queue", "upstream": []},
-    "postgres": {"vendor": "PostgreSQL Database", "host": "postgresql-cluster", "category": "database", "upstream": []},
-    "mysql": {"vendor": "MySQL Database", "host": "mysql-cluster", "category": "database", "upstream": []},
+    "cloudinary": {"vendor": "Cloudinary CDN", "host": "api.cloudinary.com", "category": "media_cdn", "upstream": ["aws-us-east-1", "fastly-cdn"]},
+    "gmail": {"vendor": "Google Gmail SMTP", "host": "smtp.gmail.com", "category": "email_dispatch", "upstream": ["google-cloud-us-central1"]},
     "aws": {"vendor": "Amazon Web Services (AWS)", "host": "amazonaws.com", "category": "cloud_infrastructure", "upstream": []},
     "cloudflare": {"vendor": "Cloudflare Edge", "host": "cloudflare.com", "category": "cdn_ddos", "upstream": []}
+}
+
+KNOWN_INFRASTRUCTURE = {
+    "mongodb": {"name": "MongoDB Database", "category": "database", "keywords": ["mongo"]},
+    "redis": {"name": "Redis Cache / Queue", "category": "cache_queue", "keywords": ["redis"]},
+    "postgres": {"name": "PostgreSQL Database", "category": "database", "keywords": ["postgres", "pgsql"]},
+    "mysql": {"name": "MySQL Database", "category": "database", "keywords": ["mysql", "mariadb"]},
+    "rabbitmq": {"name": "RabbitMQ Message Broker", "category": "message_broker", "keywords": ["rabbit", "amqp"]},
 }
 
 KNOWN_NODE_TRANSITIVES = {
@@ -168,6 +179,29 @@ def parse_requirements_txt(file_path: str) -> Dict[str, str]:
         logger.warning(f"Failed to parse requirements.txt at {file_path}: {e}")
     return deps
 
+def extract_infrastructure_from_env(env_path: str) -> List[Dict[str, Any]]:
+    infras = []
+    try:
+        with open(env_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                clean = line.strip()
+                if not clean or clean.startswith("#"):
+                    continue
+                upper = clean.upper()
+                for key, info in KNOWN_INFRASTRUCTURE.items():
+                    if any(kw.upper() in upper for kw in info["keywords"]):
+                        inf_id = f"infra:{key}"
+                        if not any(x["id"] == inf_id for x in infras):
+                            infras.append({
+                                "id": inf_id,
+                                "name": info["name"],
+                                "category": info["category"],
+                                "image": "latest"
+                            })
+    except Exception:
+        pass
+    return infras
+
 def extract_cloud_services_from_env(env_path: str) -> List[Tuple[str, str]]:
     results = []
     try:
@@ -273,6 +307,11 @@ def scan_project_directory(folder_path: str) -> Dict[str, Any]:
 
             # 2. Environment Integrations
             elif lower_file == ".env" or lower_file.startswith(".env."):
+                env_infras = extract_infrastructure_from_env(file_path)
+                for einf in env_infras:
+                    if not any(x["id"] == einf["id"] for x in infrastructure_nodes):
+                        infrastructure_nodes.append(einf)
+
                 env_svcs = extract_cloud_services_from_env(file_path)
                 for host, ev in env_svcs:
                     observed_hosts.add(host)

@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from app.models import ScanRequest
 from app.db import db
-from app.ingestion import scan_project_directory, KNOWN_CLOUD_VENDORS
+from app.ingestion import scan_project_directory, KNOWN_CLOUD_VENDORS, KNOWN_INFRASTRUCTURE, IMPORT_REGEX
 from app.security import check_vulnerabilities
 
 router = APIRouter()
@@ -16,46 +16,6 @@ router = APIRouter()
 class DirectPayloadScan(BaseModel):
     project_name: str = "Uploaded Project"
     files: Dict[str, str] = {}
-
-PACKAGE_DOMAINS = [
-    {
-        "key": "framework",
-        "title": "Core & Runtime",
-        "description": "Application framework, server routers, and runtime handlers",
-        "keywords": ["medusa", "express", "koa", "fastify", "nest", "next", "react", "vue", "angular", "django", "fastapi", "flask", "starlette", "awilix", "router", "server", "cors", "body-parser", "helmet", "webpack", "vite", "babel"]
-    },
-    {
-        "key": "database",
-        "title": "Data & Persistence",
-        "description": "Relational databases, ORMs, document stores, and memory caches",
-        "keywords": ["postgres", "pg", "mysql", "mongo", "redis", "typeorm", "prisma", "knex", "sequelize", "mikro-orm", "sqlite", "ioredis", "memcached", "cassandra", "dynamo", "elasticsearch", "opensearch", "psycopg", "sqlalchemy", "database", "cache"]
-    },
-    {
-        "key": "commerce",
-        "title": "Payments & Commerce",
-        "description": "Checkout processors, billing engines, and transaction services",
-        "keywords": ["stripe", "payment", "paypal", "razorpay", "billing", "invoice", "checkout", "commerce", "cart", "braintree", "chargebee", "square", "fulfillment"]
-    },
-    {
-        "key": "security",
-        "title": "Auth & Identity",
-        "description": "Authentication, JWT tokens, credential hashing, and security guards",
-        "keywords": ["jwt", "token", "auth", "bcrypt", "crypto", "oauth", "passport", "argon", "session", "guard", "jose", "hash", "keycloak"]
-    },
-    {
-        "key": "cloud",
-        "title": "Cloud & Integrations",
-        "description": "Third-party SaaS SDKs, telemetry, email dispatch, and storage",
-        "keywords": ["s3", "aws", "gcp", "azure", "twilio", "sendgrid", "postmark", "sentry", "datadog", "algolia", "mixpanel", "segment", "openai", "gemini", "mail", "slack"]
-    },
-]
-
-def categorize_package(pkg_name: str) -> str:
-    pkg_lower = pkg_name.lower()
-    for domain in PACKAGE_DOMAINS:
-        if any(kw in pkg_lower for kw in domain["keywords"]):
-            return domain["key"]
-    return "utilities"
 
 def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
     scan_id = str(uuid.uuid4())
@@ -139,234 +99,77 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         })
 
         svc_deps = list(s_data.get("dependencies", {}).items())
-        subsys_node_map = {}
 
-        # -------------------------------------------------------------------------
-        # BALANCED ARCHITECTURAL CLUSTERING (Avoids 50-node horizontal broomstick)
-        # -------------------------------------------------------------------------
-        use_clustering = len(svc_deps) > 8
+        # ----------------------------------------------------
+        # TIER 3: DECLARED DIRECT SOFTWARE PACKAGES
+        # ----------------------------------------------------
+        for pkg_name, ver in svc_deps:
+            clean_ver = str(ver).replace("^", "").replace("~", "").replace(">", "").replace("=", "").strip()
+            if len(clean_ver) > 18:
+                clean_ver = clean_ver[:18]
+            is_vuln = any(v["package"] == pkg_name for v in vulns)
+            pkg_id = f"pkg:{pkg_name}"
 
-        if use_clustering:
-            # Group packages into domain buckets
-            domain_buckets = {d["key"]: [] for d in PACKAGE_DOMAINS}
-            domain_buckets["utilities"] = []
-
-            for pkg_name, ver in svc_deps:
-                cat = categorize_package(pkg_name)
-                domain_buckets[cat].append((pkg_name, ver))
-
-            domain_lookup = {d["key"]: d for d in PACKAGE_DOMAINS}
-            domain_lookup["utilities"] = {
-                "key": "utilities",
-                "title": "Libraries & Utilities",
-                "description": "Utility libraries, helpers, and general dependencies"
-            }
-
-            for cat_key, cat_pkgs in domain_buckets.items():
-                if not cat_pkgs:
-                    continue
-                cat_info = domain_lookup[cat_key]
-                subsys_id = f"subsys:{clean_name}-{s_key}-{cat_key}"
-                subsys_node_map[cat_key] = subsys_id
-
-                is_subsys_vuln = any(
-                    any(v["package"] == p[0] for v in vulns) for p in cat_pkgs
-                )
-
+            if not any(n["id"] == pkg_id for n in nodes):
                 nodes.append({
-                    "id": subsys_id,
-                    "label": cat_info["title"],
-                    "type": "runtime_component",
-                    "subtype": "domain_cluster",
+                    "id": pkg_id,
+                    "label": f"{pkg_name}",
+                    "type": "software_package",
+                    "subtype": "direct",
                     "tier": 3,
+                    "version": clean_ver,
                     "provenance": "declared",
-                    "status": "compromised" if is_subsys_vuln else "healthy",
-                    "criticality": "critical" if is_subsys_vuln else "high",
-                    "metadata": {
-                        "category": cat_key,
-                        "description": cat_info["description"],
-                        "package_count": len(cat_pkgs)
-                    }
+                    "status": "compromised" if is_vuln else "healthy",
+                    "criticality": "critical" if is_vuln else "medium",
+                    "metadata": {"version": clean_ver}
                 })
-                edges.append({
-                    "id": f"e_sub_{edge_counter}",
-                    "source": s_id,
-                    "target": subsys_id,
-                    "relation": "powers_subsystem",
-                    "provenance": "declared",
-                    "confidence_score": 1.0
-                })
-                edge_counter += 1
+            edges.append({
+                "id": f"e_pkg_{edge_counter}",
+                "source": s_id,
+                "target": pkg_id,
+                "relation": "depends_on",
+                "provenance": "declared",
+                "confidence_score": 1.0
+            })
+            edge_counter += 1
 
-                # Prioritize: show compromised packages first, then primary drivers
-                vuln_pkgs = [p for p in cat_pkgs if any(v["package"] == p[0] for v in vulns)]
-                safe_pkgs = [p for p in cat_pkgs if not any(v["package"] == p[0] for v in vulns)]
-                sorted_pkgs = vuln_pkgs + safe_pkgs
+            # ----------------------------------------------------
+            # TIER 4: TRANSITIVE SUB-DEPENDENCIES (Lockfile Hierarchy)
+            # ----------------------------------------------------
+            if pkg_name in transitives:
+                for child_pkg, child_ver in transitives[pkg_name].items():
+                    clean_cver = str(child_ver).replace("^", "").replace("~", "").strip()
+                    if len(clean_cver) > 18:
+                        clean_cver = clean_cver[:18]
+                    is_child_vuln = any(v["package"] == child_pkg for v in vulns)
+                    child_id = f"pkg:trans:{child_pkg}"
 
-                display_limit = 4
-                display_pkgs = sorted_pkgs[:display_limit]
-                overflow_pkgs = sorted_pkgs[display_limit:]
-
-                for pkg_name, ver in display_pkgs:
-                    clean_ver = str(ver).replace("^", "").replace("~", "").replace(">", "").replace("=", "").strip()
-                    if len(clean_ver) > 18:
-                        clean_ver = clean_ver[:18]
-                    is_vuln = any(v["package"] == pkg_name for v in vulns)
-                    pkg_id = f"pkg:{pkg_name}"
-
-                    if not any(n["id"] == pkg_id for n in nodes):
+                    if not any(n["id"] == child_id for n in nodes):
                         nodes.append({
-                            "id": pkg_id,
-                            "label": f"{pkg_name}",
+                            "id": child_id,
+                            "label": f"{child_pkg}",
                             "type": "software_package",
-                            "subtype": "direct",
+                            "subtype": "transitive",
                             "tier": 4,
-                            "version": clean_ver,
+                            "version": clean_cver,
                             "provenance": "declared",
-                            "status": "compromised" if is_vuln else "healthy",
-                            "criticality": "critical" if is_vuln else "medium",
-                            "metadata": {"version": clean_ver, "domain": cat_info["title"]}
+                            "status": "compromised" if is_child_vuln else "healthy",
+                            "criticality": "high" if is_child_vuln else "low",
+                            "metadata": {"version": clean_cver, "parent": pkg_name}
                         })
                     edges.append({
-                        "id": f"e_pkg_{edge_counter}",
-                        "source": subsys_id,
-                        "target": pkg_id,
-                        "relation": "depends_on",
+                        "id": f"e_trans_{edge_counter}",
+                        "source": pkg_id,
+                        "target": child_id,
+                        "relation": "depends_on_transitive",
                         "provenance": "declared",
-                        "confidence_score": 1.0
+                        "confidence_score": 0.95
                     })
                     edge_counter += 1
 
-                    # Transitive children connect to their direct parent package
-                    if pkg_name in transitives:
-                        child_deps = list(transitives[pkg_name].items())[:3]
-                        for child_pkg, child_ver in child_deps:
-                            clean_cver = str(child_ver).replace("^", "").replace("~", "").strip()
-                            if len(clean_cver) > 18:
-                                clean_cver = clean_cver[:18]
-                            is_child_vuln = any(v["package"] == child_pkg for v in vulns)
-                            child_id = f"pkg:trans:{child_pkg}"
-
-                            if not any(n["id"] == child_id for n in nodes):
-                                nodes.append({
-                                    "id": child_id,
-                                    "label": f"{child_pkg}",
-                                    "type": "software_package",
-                                    "subtype": "transitive",
-                                    "tier": 5,
-                                    "version": clean_cver,
-                                    "provenance": "declared",
-                                    "status": "compromised" if is_child_vuln else "healthy",
-                                    "criticality": "high" if is_child_vuln else "low",
-                                    "metadata": {"version": clean_cver, "parent": pkg_name}
-                                })
-                            edges.append({
-                                "id": f"e_trans_{edge_counter}",
-                                "source": pkg_id,
-                                "target": child_id,
-                                "relation": "depends_on_transitive",
-                                "provenance": "declared",
-                                "confidence_score": 0.95
-                            })
-                            edge_counter += 1
-
-                # If more than 4 packages exist in this category, create a compact cluster bundle node
-                if overflow_pkgs:
-                    bundle_id = f"bundle:{clean_name}-{s_key}-{cat_key}"
-                    bundled_dict = {p[0]: p[1] for p in overflow_pkgs}
-                    nodes.append({
-                        "id": bundle_id,
-                        "label": f"+ {len(overflow_pkgs)} More {cat_info['title']}",
-                        "type": "software_package",
-                        "subtype": "cluster_bundle",
-                        "tier": 4,
-                        "provenance": "declared",
-                        "status": "healthy",
-                        "criticality": "low",
-                        "metadata": {
-                            "bundled_packages": bundled_dict,
-                            "count": len(overflow_pkgs),
-                            "category": cat_info["title"]
-                        }
-                    })
-                    edges.append({
-                        "id": f"e_bun_{edge_counter}",
-                        "source": subsys_id,
-                        "target": bundle_id,
-                        "relation": "contains_packages",
-                        "provenance": "declared",
-                        "confidence_score": 1.0
-                    })
-                    edge_counter += 1
-
-        else:
-            # Small project (<= 8 deps): connect directly to the service
-            for pkg_name, ver in svc_deps:
-                clean_ver = str(ver).replace("^", "").replace("~", "").replace(">", "").replace("=", "").strip()
-                if len(clean_ver) > 18:
-                    clean_ver = clean_ver[:18]
-                is_vuln = any(v["package"] == pkg_name for v in vulns)
-                pkg_id = f"pkg:{pkg_name}"
-
-                if not any(n["id"] == pkg_id for n in nodes):
-                    nodes.append({
-                        "id": pkg_id,
-                        "label": f"{pkg_name}",
-                        "type": "software_package",
-                        "subtype": "direct",
-                        "tier": 3,
-                        "version": clean_ver,
-                        "provenance": "declared",
-                        "status": "compromised" if is_vuln else "healthy",
-                        "criticality": "critical" if is_vuln else "medium",
-                        "metadata": {"version": clean_ver}
-                    })
-                edges.append({
-                    "id": f"e_pkg_{edge_counter}",
-                    "source": s_id,
-                    "target": pkg_id,
-                    "relation": "depends_on",
-                    "provenance": "declared",
-                    "confidence_score": 1.0
-                })
-                edge_counter += 1
-
-                if pkg_name in transitives:
-                    child_deps = list(transitives[pkg_name].items())[:3]
-                    for child_pkg, child_ver in child_deps:
-                        clean_cver = str(child_ver).replace("^", "").replace("~", "").strip()
-                        if len(clean_cver) > 18:
-                            clean_cver = clean_cver[:18]
-                        is_child_vuln = any(v["package"] == child_pkg for v in vulns)
-                        child_id = f"pkg:trans:{child_pkg}"
-
-                        if not any(n["id"] == child_id for n in nodes):
-                            nodes.append({
-                                "id": child_id,
-                                "label": f"{child_pkg}",
-                                "type": "software_package",
-                                "subtype": "transitive",
-                                "tier": 4,
-                                "version": clean_cver,
-                                "provenance": "declared",
-                                "status": "compromised" if is_child_vuln else "healthy",
-                                "criticality": "high" if is_child_vuln else "low",
-                                "metadata": {"version": clean_cver, "parent": pkg_name}
-                            })
-                        edges.append({
-                            "id": f"e_trans_{edge_counter}",
-                            "source": pkg_id,
-                            "target": child_id,
-                            "relation": "depends_on_transitive",
-                            "provenance": "declared",
-                            "confidence_score": 0.95
-                        })
-                        edge_counter += 1
-
         # ----------------------------------------------------
-        # TIER 4: INFRASTRUCTURE (Connects to Data Subsystem or Service)
+        # TIER 3: INFRASTRUCTURE (Databases, Caches, Brokers)
         # ----------------------------------------------------
-        infra_parent_id = subsys_node_map.get("database", s_id)
         for inf in infras:
             inf_id = inf["id"]
             if not any(n["id"] == inf_id for n in nodes):
@@ -374,7 +177,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
                     "id": inf_id,
                     "label": inf["name"],
                     "type": "infrastructure_resource",
-                    "tier": 4 if use_clustering else 3,
+                    "tier": 3,
                     "category": inf.get("category", "database"),
                     "provenance": "declared",
                     "status": "healthy",
@@ -383,7 +186,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
                 })
             edges.append({
                 "id": f"e_infra_{edge_counter}",
-                "source": infra_parent_id,
+                "source": s_id,
                 "target": inf_id,
                 "relation": "queries_database" if "database" in inf.get("category", "") else "uses_cache",
                 "provenance": "declared",
@@ -392,76 +195,98 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
             edge_counter += 1
 
         # ----------------------------------------------------
-        # TIER 4/5: EXTERNAL APIs & CLOUD VENDORS
+        # TIER 4: EXTERNAL CLOUD SERVICES & APIS (Deduplicated)
         # ----------------------------------------------------
-        ext_parent_id = subsys_node_map.get("cloud", subsys_node_map.get("commerce", s_id))
         ext_calls = s_data.get("external_calls", [])
         if isinstance(ext_calls, set):
             ext_calls = list(ext_calls)
 
-        for host in ext_calls[:8]:
+        processed_vendors = set()
+        for host in ext_calls:
             matched_vendor_key = next(
                 (k for k in KNOWN_CLOUD_VENDORS if k in host.lower()), None
             )
-            is_known_vendor = matched_vendor_key is not None or any(
-                v in host for v in ["stripe.com", "auth0.com", "twilio.com", "sendgrid.com",
-                                    "firebase", "aws", "cloudflare", "razorpay", "openai",
-                                    "supabase", "algolia", "veriff", "sentry", "mixpanel"]
-            )
-            host_id = f"ext:{host}"
-            vendor_label = KNOWN_CLOUD_VENDORS[matched_vendor_key]["vendor"] if matched_vendor_key else host
 
-            # Pick target parent: payment vendors attach to commerce if present
-            target_parent = subsys_node_map.get("commerce", ext_parent_id) if any(p in host for p in ["stripe", "paypal", "razorpay"]) else ext_parent_id
+            if matched_vendor_key:
+                vendor_info = KNOWN_CLOUD_VENDORS[matched_vendor_key]
+                vendor_id = f"vendor:{matched_vendor_key}"
 
-            if not any(n["id"] == host_id for n in nodes):
-                nodes.append({
-                    "id": host_id,
-                    "label": vendor_label,
-                    "type": "vendor" if is_known_vendor else "external_api",
-                    "tier": 4 if use_clustering else 3,
-                    "host": host,
-                    "provenance": "declared" if is_known_vendor else "observed",
-                    "status": "healthy" if is_known_vendor else "warning",
-                    "criticality": "critical" if is_known_vendor else "high",
-                    "metadata": {"host": host, "category": KNOWN_CLOUD_VENDORS.get(matched_vendor_key, {}).get("category", "api")}
-                })
-            edges.append({
-                "id": f"e_ext_{edge_counter}",
-                "source": target_parent,
-                "target": host_id,
-                "relation": "calls_api",
-                "provenance": "declared" if is_known_vendor else "observed",
-                "confidence_score": 0.99
-            })
-            edge_counter += 1
-
-            # ----------------------------------------------------
-            # TIER 6: VENDOR UPSTREAM INFRASTRUCTURE (Passports)
-            # ----------------------------------------------------
-            if matched_vendor_key and KNOWN_CLOUD_VENDORS[matched_vendor_key].get("upstream"):
-                for up_name in KNOWN_CLOUD_VENDORS[matched_vendor_key]["upstream"][:1]:
-                    up_id = f"upstream:{up_name}"
-                    if not any(n["id"] == up_id for n in nodes):
+                if vendor_id not in processed_vendors:
+                    processed_vendors.add(vendor_id)
+                    if not any(n["id"] == vendor_id for n in nodes):
                         nodes.append({
-                            "id": up_id,
-                            "label": up_name,
-                            "type": "vendor_upstream",
-                            "tier": 6 if use_clustering else 5,
-                            "provenance": "vendor_passport",
+                            "id": vendor_id,
+                            "label": vendor_info["vendor"],
+                            "type": "vendor",
+                            "tier": 4,
+                            "host": vendor_info["host"],
+                            "provenance": "declared",
                             "status": "healthy",
-                            "criticality": "high",
-                            "metadata": {"region": up_name}
+                            "criticality": "critical",
+                            "metadata": {
+                                "category": vendor_info.get("category", "api"),
+                                "matched_endpoint": host
+                            }
                         })
                     edges.append({
-                        "id": f"e_up_{edge_counter}",
-                        "source": host_id,
-                        "target": up_id,
-                        "relation": "relies_on_upstream",
-                        "provenance": "vendor_passport",
-                        "confidence_score": 0.90
+                        "id": f"e_v_{edge_counter}",
+                        "source": s_id,
+                        "target": vendor_id,
+                        "relation": "calls_api",
+                        "provenance": "declared",
+                        "confidence_score": 1.0
                     })
                     edge_counter += 1
+
+                    # ----------------------------------------------------
+                    # TIER 5: VENDOR UPSTREAM INFRASTRUCTURE (Passports)
+                    # ----------------------------------------------------
+                    for up_name in vendor_info.get("upstream", []):
+                        up_id = f"upstream:{up_name}"
+                        if not any(n["id"] == up_id for n in nodes):
+                            nodes.append({
+                                "id": up_id,
+                                "label": up_name,
+                                "type": "vendor_upstream",
+                                "tier": 5,
+                                "provenance": "vendor_passport",
+                                "status": "healthy",
+                                "criticality": "high",
+                                "metadata": {"region": up_name}
+                            })
+                        edges.append({
+                            "id": f"e_up_{edge_counter}",
+                            "source": vendor_id,
+                            "target": up_id,
+                            "relation": "relies_on_upstream",
+                            "provenance": "vendor_passport",
+                            "confidence_score": 0.90
+                        })
+                        edge_counter += 1
+            else:
+                # Direct observed external / shadow API
+                host_id = f"ext:{host}"
+                if not any(n["id"] == host_id for n in nodes):
+                    nodes.append({
+                        "id": host_id,
+                        "label": host,
+                        "type": "external_api",
+                        "tier": 4,
+                        "host": host,
+                        "provenance": "observed",
+                        "status": "warning",
+                        "criticality": "high",
+                        "metadata": {"host": host, "category": "external_api"}
+                    })
+                edges.append({
+                    "id": f"e_ext_{edge_counter}",
+                    "source": s_id,
+                    "target": host_id,
+                    "relation": "calls_api",
+                    "provenance": "observed",
+                    "confidence_score": 0.90
+                })
+                edge_counter += 1
 
     # ----------------------------------------------------
     # TIER 0: BUSINESS JOURNEYS (Top Level Business Impact)
@@ -703,10 +528,35 @@ async def scan_direct_files(payload: DirectPayloadScan):
                 if not clean_line or clean_line.startswith("#"):
                     continue
                 upper = clean_line.upper()
+
+                # Infrastructure extraction from .env
+                for key, info in KNOWN_INFRASTRUCTURE.items():
+                    if any(kw.upper() in upper for kw in info["keywords"]):
+                        inf_id = f"infra:{key}"
+                        if not any(x["id"] == inf_id for x in infras):
+                            infras.append({
+                                "id": inf_id,
+                                "name": info["name"],
+                                "category": info["category"],
+                                "image": "latest"
+                            })
+
+                # Cloud vendor extraction from .env
                 for key, info in KNOWN_CLOUD_VENDORS.items():
                     if key.upper() in upper:
                         observed_hosts.add(info["host"])
                         evidence_map.setdefault(info["host"], []).append(f"{fname}: {clean_line.split('=')[0]}")
+
+        # Source code import inspection
+        if any(fname_lower.endswith(ext) for ext in [".js", ".jsx", ".ts", ".tsx"]):
+            import_matches = IMPORT_REGEX.findall(content)
+            for imp in import_matches:
+                raw_pkg = imp[0] or imp[1]
+                if raw_pkg and not raw_pkg.startswith((".", "/")):
+                    root_pkg = raw_pkg.split("/")[0]
+                    if root_pkg not in ["react", "react-dom"] and not root_pkg.startswith("@types/"):
+                        if root_pkg not in deps:
+                            deps[root_pkg] = "latest"
 
         # URL scan across all files
         matches = URL_REGEX.findall(content)

@@ -63,6 +63,75 @@ const TIER_COLORS: Record<number, { bg: string; border: string; text: string }> 
   6: { bg: '#1E1B4B', border: '#818CF8', text: '#E0E7FF' },   // indigo – Upstream
 };
 
+function computeArchitecturePositions(nodes: GraphNode[]) {
+  const positions: Record<string, { x: number; y: number }> = {};
+
+  const appNodes = nodes.filter((n) => n.type === 'application');
+  const svcNodes = nodes.filter((n) => n.type === 'internal_service');
+  const infraNodes = nodes.filter((n) => (n.type as string) === 'infrastructure_resource');
+  const vendorNodes = nodes.filter((n) => n.type === 'vendor' || n.type === 'external_api');
+  const upstreamNodes = nodes.filter((n) => n.type === 'vendor_upstream');
+  const journeyNodes = nodes.filter((n) => n.type === 'business_journey');
+  const directPkgs = nodes.filter(
+    (n) => n.type === 'software_package' && (n as any).subtype !== 'transitive'
+  );
+  const transPkgs = nodes.filter(
+    (n) => n.type === 'software_package' && (n as any).subtype === 'transitive'
+  );
+
+  // 1. Root Application (Top Center)
+  appNodes.forEach((n) => {
+    positions[n.id] = { x: 0, y: -240 };
+  });
+
+  // 2. Services (Below Application)
+  const svcCount = svcNodes.length || 1;
+  const svcSpacing = 160;
+  svcNodes.forEach((n, i) => {
+    const x = svcCount === 1 ? 0 : -((svcCount - 1) * svcSpacing) / 2 + i * svcSpacing;
+    positions[n.id] = { x, y: -110 };
+  });
+
+  // 3. Business Journey (Top Right)
+  journeyNodes.forEach((n, i) => {
+    positions[n.id] = { x: 380 + i * 110, y: -200 };
+  });
+
+  // 4. Infrastructure Resources (Left Wing - Databases, Caches)
+  infraNodes.forEach((n, i) => {
+    positions[n.id] = { x: -440, y: 30 + i * 110 };
+  });
+
+  // 5. Cloud Vendors & External APIs (Right Wing)
+  vendorNodes.forEach((n, i) => {
+    positions[n.id] = { x: +440, y: 30 + i * 110 };
+  });
+
+  // 6. Upstream Passports (Far Right Wing)
+  upstreamNodes.forEach((n, i) => {
+    positions[n.id] = { x: +720, y: 50 + i * 95 };
+  });
+
+  // 7. Software Packages (Center Grid - Balanced Multi-Column Matrix)
+  const allPkgs = [...directPkgs, ...transPkgs];
+  const pkgCount = allPkgs.length;
+  const numCols = pkgCount > 24 ? 4 : (pkgCount > 8 ? 3 : (pkgCount > 2 ? 2 : 1));
+  const colWidth = 145;
+  const rowHeight = 90;
+  const startX = -((numCols - 1) * colWidth) / 2;
+
+  allPkgs.forEach((n, idx) => {
+    const col = idx % numCols;
+    const row = Math.floor(idx / numCols);
+    positions[n.id] = {
+      x: startX + col * colWidth,
+      y: 40 + row * rowHeight,
+    };
+  });
+
+  return positions;
+}
+
 export const GraphExplorer: React.FC<GraphExplorerProps> = ({
   graphData,
   onSelectNode,
@@ -82,11 +151,15 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
     let activeEdges = graphData.edges;
 
     if (filterLayer === 'declared_only') {
-      activeNodes = activeNodes.filter((n) => n.provenance === 'declared');
+      activeNodes = activeNodes.filter(
+        (n) => n.provenance === 'declared' || (n.type as string) === 'infrastructure_resource'
+      );
       const nodeIds = new Set(activeNodes.map((n) => n.id));
       activeEdges = activeEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
     } else if (filterLayer === 'observed_only') {
-      activeNodes = activeNodes.filter((n) => n.provenance === 'observed');
+      activeNodes = activeNodes.filter(
+        (n) => n.provenance === 'observed' || n.type === 'external_api'
+      );
       const nodeIds = new Set(activeNodes.map((n) => n.id));
       activeEdges = activeEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
     } else if (filterLayer === 'discrepancies_only') {
@@ -97,12 +170,12 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       activeEdges = activeEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
     }
 
+    const positions = computeArchitecturePositions(activeNodes);
+
     const elements = [
       ...activeNodes.map((node) => {
         const tier = getTier(node);
         const sub = (node as any).subtype || '';
-        const isCluster = sub === 'domain_cluster';
-        const isBundle = sub === 'cluster_bundle';
         const isVuln = node.status === 'compromised';
 
         let bg = TIER_COLORS[tier]?.bg ?? '#1E293B';
@@ -111,24 +184,12 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
 
         // Generous, clearly visible node dimensions
         let w = 56;
-        let h = 42;
+        let h = 40;
 
-        if (isCluster) {
-          bg = '#083344';
-          border = '#06B6D4';
-          textColor = '#E0F2FE';
-          w = 72;
-          h = 48;
-        } else if (isBundle) {
-          bg = '#131A26';
-          border = '#64748B';
-          textColor = '#94A3B8';
-          w = 60;
-          h = 36;
-        } else if (node.type === 'business_journey') {
-          bg = '#854D0E';
-          border = '#FACC15';
-          textColor = '#FEF08A';
+        if (node.type === 'business_journey') {
+          bg = '#78350F';
+          border = '#FBBF24';
+          textColor = '#FEF3C7';
           w = 64;
           h = 64;
         } else if (node.type === 'application') {
@@ -141,26 +202,38 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           bg = '#4C1D95';
           border = '#A78BFA';
           textColor = '#EDE9FE';
-          w = 62;
+          w = 64;
           h = 48;
-        } else if (node.type === 'infrastructure_resource') {
+        } else if ((node.type as string) === 'infrastructure_resource') {
           bg = '#064E3B';
           border = '#34D399';
           textColor = '#D1FAE5';
-          w = 58;
-          h = 46;
+          w = 62;
+          h = 48;
         } else if (node.type === 'vendor' || node.type === 'external_api') {
           bg = '#7F1D1D';
           border = '#F87171';
           textColor = '#FEE2E2';
-          w = 58;
-          h = 42;
+          w = 60;
+          h = 44;
+        } else if (node.type === 'vendor_upstream') {
+          bg = '#1E1B4B';
+          border = '#818CF8';
+          textColor = '#E0E7FF';
+          w = 56;
+          h = 36;
         } else if (sub === 'transitive') {
           bg = '#0F172A';
-          border = '#475569';
+          border = '#64748B';
           textColor = '#94A3B8';
           w = 46;
-          h = 34;
+          h = 36;
+        } else if (node.type === 'software_package') {
+          bg = '#082F49';
+          border = '#38BDF8';
+          textColor = '#E0F2FE';
+          w = 56;
+          h = 40;
         }
 
         if (isVuln) {
@@ -186,6 +259,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
             nodeWidth: w,
             nodeHeight: h,
           },
+          position: positions[node.id] || { x: 0, y: 0 },
         };
       }),
       ...activeEdges.map((edge) => ({
@@ -199,17 +273,12 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       })),
     ];
 
-    // Dagre layout configuration for top-to-bottom structured DAG
-    const dagreLayout: any = {
-      name: 'dagre',
-      rankDir: 'TB',
-      align: 'UL',
-      nodeSep: 65,
-      rankSep: 105,
-      edgeSep: 25,
-      ranker: 'network-simplex',
-      animate: false,
+    // Preset architectural layout
+    const presetLayout: any = {
+      name: 'preset',
+      fit: true,
       padding: 60,
+      animate: false,
     };
 
     // Organic force layout
@@ -308,50 +377,28 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           },
         },
 
-        // Default edge
+        // Base edge
         {
           selector: 'edge',
           style: {
-            'width': 1.2,
-            'line-color': '#334155',
-            'target-arrow-color': '#475569',
-            'target-arrow-shape': 'triangle',
-            'arrow-scale': 0.7,
-            'curve-style': 'bezier',
-            'line-style': 'solid',
-            'opacity': 0.7,
-          },
-        },
-
-        // powers_subsystem edge (cyan subsystem flow)
-        {
-          selector: 'edge[relation = "powers_subsystem"]',
-          style: {
-            'line-color': '#0891B2',
-            'target-arrow-color': '#06B6D4',
-            'width': 2.2,
-            'line-style': 'solid',
-          },
-        },
-
-        // contains_packages edge (dashed)
-        {
-          selector: 'edge[relation = "contains_packages"]',
-          style: {
+            'width': 1.4,
             'line-color': '#475569',
             'target-arrow-color': '#64748B',
-            'width': 1.2,
-            'line-style': 'dashed',
+            'target-arrow-shape': 'triangle',
+            'arrow-scale': 0.85,
+            'curve-style': 'bezier',
+            'line-style': 'solid',
+            'opacity': 0.8,
           },
         },
 
-        // depends_on – direct
+        // depends_on – direct declared package
         {
           selector: 'edge[relation = "depends_on"]',
           style: {
-            'line-color': '#4B5563',
-            'target-arrow-color': '#6B7280',
-            'width': 1.2,
+            'line-color': '#0284C7',
+            'target-arrow-color': '#38BDF8',
+            'width': 1.4,
           },
         },
 
@@ -360,10 +407,10 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           selector: 'edge[relation = "depends_on_transitive"]',
           style: {
             'line-style': 'dashed',
-            'line-color': '#374151',
-            'target-arrow-color': '#4B5563',
-            'width': 1,
-            'opacity': 0.6,
+            'line-color': '#475569',
+            'target-arrow-color': '#64748B',
+            'width': 1.2,
+            'opacity': 0.65,
           },
         },
 
@@ -373,7 +420,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           style: {
             'line-color': '#7C3AED',
             'target-arrow-color': '#8B5CF6',
-            'width': 2,
+            'width': 2.2,
           },
         },
 
@@ -381,7 +428,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         {
           selector: 'edge[relation = "calls_api"]',
           style: {
-            'line-color': '#991B1B',
+            'line-color': '#DC2626',
             'target-arrow-color': '#EF4444',
             'width': 1.5,
             'line-style': 'dashed',
@@ -392,9 +439,9 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         {
           selector: 'edge[relation = "queries_database"], edge[relation = "uses_cache"]',
           style: {
-            'line-color': '#065F46',
+            'line-color': '#059669',
             'target-arrow-color': '#34D399',
-            'width': 1.5,
+            'width': 1.6,
           },
         },
 
@@ -402,15 +449,15 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         {
           selector: 'edge[relation = "relies_on_upstream"]',
           style: {
-            'line-color': '#312E81',
+            'line-color': '#4F46E5',
             'target-arrow-color': '#818CF8',
-            'width': 1,
+            'width': 1.2,
             'line-style': 'dotted',
-            'opacity': 0.5,
+            'opacity': 0.7,
           },
         },
       ],
-      layout: layoutMode === 'hierarchical' ? dagreLayout : coseLayout,
+      layout: layoutMode === 'hierarchical' ? presetLayout : coseLayout,
     });
 
     cy.on('tap', 'node', (evt: EventObject) => {
@@ -424,14 +471,13 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       }
     });
 
-    // Fit cleanly and enforce readable minimum zoom
+    // Fit cleanly into screen with balanced padding
     cy.one('layoutstop', () => {
       cy.fit(undefined, 60);
-      if (cy.zoom() < 0.65) {
-        cy.zoom(0.7);
-        cy.center();
-      }
     });
+    if (layoutMode === 'hierarchical') {
+      cy.fit(undefined, 60);
+    }
 
     cyRef.current = cy;
 
@@ -529,12 +575,12 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
                     <span>Service</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Hexagon className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                    <span>Subsystem</span>
+                    <Package className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span>Direct Pkg</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Package className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>Direct Pkg</span>
+                    <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>Transitive Dep</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Database className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -542,11 +588,11 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <Cloud className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                    <span>Cloud API</span>
+                    <span>Cloud / SaaS API</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Star className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>Journey</span>
+                    <span>Business Journey</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />
@@ -561,29 +607,43 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
                 <div className="space-y-1.5 text-[11px]">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="w-4 h-0.5 bg-cyan-500 rounded" />
-                      <span>Subsystem Power</span>
+                      <span className="w-4 h-0.5 bg-purple-500 rounded" />
+                      <span>Service Call</span>
                     </div>
                     <span className="text-zinc-500 text-[10px]">Solid</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="w-4 h-0.5 bg-slate-400 rounded" />
-                      <span>Dependency</span>
+                      <span className="w-4 h-0.5 bg-sky-500 rounded" />
+                      <span>Package Dependency</span>
                     </div>
                     <span className="text-zinc-500 text-[10px]">Solid</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="w-4 h-0 border-t-2 border-dashed border-red-400" />
+                      <span className="w-4 h-0.5 bg-emerald-500 rounded" />
+                      <span>Database / Cache</span>
+                    </div>
+                    <span className="text-zinc-500 text-[10px]">Solid</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-0 border-t-2 border-dashed border-red-500" />
                       <span>External API Call</span>
                     </div>
                     <span className="text-zinc-500 text-[10px]">Dashed</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
+                      <span className="w-4 h-0 border-t-2 border-dashed border-slate-500" />
+                      <span>Transitive Sub-dep</span>
+                    </div>
+                    <span className="text-zinc-500 text-[10px]">Dashed</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
                       <span className="w-4 h-0 border-t-2 border-dotted border-indigo-400" />
-                      <span>Upstream Infra</span>
+                      <span>Upstream Cloud Infra</span>
                     </div>
                     <span className="text-zinc-500 text-[10px]">Dotted</span>
                   </div>

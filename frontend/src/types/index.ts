@@ -3,6 +3,7 @@ export type NodeType =
   | 'internal_service'
   | 'external_api'
   | 'vendor'
+  | 'vendor_upstream'
   | 'software_package'
   | 'runtime_component'
   | 'infrastructure_resource'
