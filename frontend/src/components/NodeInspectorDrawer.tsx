@@ -60,6 +60,34 @@ export const NodeInspectorDrawer: React.FC<NodeInspectorDrawerProps> = ({
           </div>
         </div>
 
+        {/* Subsystem / Domain Cluster Description */}
+        {node.metadata?.description && (
+          <div className="p-3 rounded-xl bg-cyan-950/20 border border-cyan-800/30">
+            <span className="text-[10px] text-cyan-400 uppercase font-semibold block mb-1">Architecture Subsystem</span>
+            <p className="text-slate-300 text-xs leading-relaxed">{String(node.metadata.description)}</p>
+          </div>
+        )}
+
+        {/* Bundled Packages List */}
+        {node.metadata?.bundled_packages && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-white text-xs">Included Packages</span>
+              <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 font-mono">
+                {Object.keys(node.metadata.bundled_packages as any).length} packages
+              </span>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-1.5 p-2 rounded-xl bg-slate-950 border border-slate-800">
+              {Object.entries(node.metadata.bundled_packages as Record<string, string>).map(([name, ver]) => (
+                <div key={name} className="flex items-center justify-between text-[11px] py-1 border-b border-slate-900 last:border-0">
+                  <span className="font-mono text-slate-200">{name}</span>
+                  <span className="font-mono text-slate-400 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded">{ver}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Associated Findings */}
         {associatedFindings.length > 0 && (
           <div className="space-y-3">
