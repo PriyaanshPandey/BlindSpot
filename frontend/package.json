@@ -1,7 +1,7 @@
 {
   "name": "hdx-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,7 @@
     "react-dom": "^18.3.1",
     "cytoscape": "^3.29.2",
     "lucide-react": "^0.395.0",
+    "recharts": "^2.12.7",
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.3.0"
   },
@@ -28,4 +29,3 @@
     "vite": "^5.2.11"
   }
 }
-

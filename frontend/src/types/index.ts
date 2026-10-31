@@ -56,9 +56,16 @@ export interface Finding {
   target_node_id: string;
   affected_journey_ids: string[];
   evidence_references: string[];
+  security_details?: {
+    cve_id?: string;
+    cvss_score?: number;
+    advisory_source?: string;
+    fixed_version?: string;
+  };
   remediation?: {
     summary: string;
     recommended_action: string;
+    code_patch?: string;
   };
 }
 
@@ -76,6 +83,10 @@ export interface SimulationResult {
   scan_id: string;
   name: string;
   target_node_id: string;
+  simulation_parameters: {
+    failure_duration_hours: number;
+    failure_type: string;
+  };
   impact_results: {
     blast_radius_node_count: number;
     impacted_node_ids: string[];
@@ -91,3 +102,65 @@ export interface SimulationResult {
   };
 }
 
+export interface ScanSummary {
+  scan_id: string;
+  project_name: string;
+  status: string;
+  started_at: string;
+  completed_at?: string;
+  summary: {
+    declared_dependencies: number;
+    observed_dependencies: number;
+    discrepancies_found: number;
+    vulnerabilities_found: number;
+    critical_paths: number;
+    execution_time_ms: number;
+  };
+}
+
+export interface KnowledgeManifest {
+  manifest_version: string;
+  active_bundle_id: string;
+  bundle_sha256: string;
+  signing_key_id: string;
+  published_at: string;
+  distribution_channel: string;
+  operating_mode: string;
+  privacy_isolation: string;
+}
+
+export interface BundleVerificationSummary {
+  bundle_id: string;
+  version: string;
+  bundle_sha256: string;
+  overall_status: 'verified' | 'tampered_or_invalid';
+  is_genuine: boolean;
+  ed25519_verification: {
+    is_valid: boolean;
+    bundle_sha256: string;
+    signing_key_id?: string;
+    error?: string | null;
+  };
+  solana_verification: {
+    verified: boolean;
+    cluster: string;
+    tx_signature: string;
+    slot: number;
+    is_on_chain: boolean;
+    explorer_url: string;
+  };
+}
+
+export interface AIExplanation {
+  finding_id: string;
+  target_package: string;
+  audience: 'builder' | 'enterprise';
+  summary: string;
+  why_it_matters: string;
+  technical_impact: string;
+  safe_remediation_steps: string[];
+  confidence_score: number;
+  is_ai_generated: boolean;
+  is_fallback: boolean;
+  notice: string;
+}

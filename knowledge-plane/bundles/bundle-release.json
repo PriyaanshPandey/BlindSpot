@@ -1,0 +1,66 @@
+{
+  "bundle_id": "bundle-20261031-120812",
+  "version": "1.1.0",
+  "published_at": "2026-10-31T12:08:12.951947Z",
+  "publisher": "HDX Public Knowledge Authority (DigitalOcean)",
+  "vendor_passports": [
+    {
+      "vendor_id": "vendor:stripe",
+      "name": "Stripe, Inc.",
+      "domain": "stripe.com",
+      "passport_version": "1.0.0",
+      "disclosed_upstream_dependencies": [
+        {
+          "provider": "Amazon Web Services (AWS)",
+          "service": "Compute & Data Stores (us-east-1)",
+          "criticality": "high"
+        },
+        {
+          "provider": "Cloudflare",
+          "service": "DDoS Mitigation & Edge Routing",
+          "criticality": "high"
+        }
+      ],
+      "ed25519_signature": "MEUCIQD...sample_sig...AiEA",
+      "solana_anchor_hash": "8u9V...devnet...3k1"
+    },
+    {
+      "vendor_id": "vendor:auth0",
+      "name": "Auth0 by Okta",
+      "domain": "auth0.com",
+      "passport_version": "1.0.0",
+      "disclosed_upstream_dependencies": [
+        {
+          "provider": "Amazon Web Services (AWS)",
+          "service": "Global Identity Services",
+          "criticality": "critical"
+        }
+      ],
+      "ed25519_signature": "MEQ...sample_sig...OK",
+      "solana_anchor_hash": "2k8M...devnet...9yT"
+    }
+  ],
+  "cve_advisories": [
+    {
+      "cve_id": "CVE-2018-3721",
+      "package": "event-stream",
+      "affected_versions": [
+        "3.3.6"
+      ],
+      "severity": "critical",
+      "fixed_version": "3.3.7"
+    },
+    {
+      "cve_id": "CVE-2022-23529",
+      "package": "jsonwebtoken",
+      "affected_versions": [
+        "8.5.1"
+      ],
+      "severity": "high",
+      "fixed_version": "9.0.0"
+    }
+  ],
+  "bundle_sha256_hash": "840bc4333c0e8ef495438d7ca2e24ec0973245adf8466984beed4b88f76be7b7",
+  "ed25519_signature": "0853037e3ca11a637ca6deb08ba9d82be6494e3b3ba2bdf84dec394e8e7d45cf03a4122cab4d0c36bae2d0d343fb0e867250b5a647ff526b3aa1ea204b992d0c",
+  "signing_key_id": "e3851f2f6c1cc8ea81e42cb7bde4be1a7fadfa8c8f9b05bcec55720d373b76f3"
+}
