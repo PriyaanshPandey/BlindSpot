@@ -9,6 +9,7 @@ interface NavbarProps {
   onTriggerScan: (customPath?: string) => void;
   isScanning: boolean;
   onOpenKnowledgeModal: () => void;
+  onGoToLanding?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,7 +19,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   setTargetPath,
   onTriggerScan,
   isScanning,
-  onOpenKnowledgeModal
+  onOpenKnowledgeModal,
+  onGoToLanding
 }) => {
   const [isFolderOpen, setIsFolderOpen] = useState(false);
 
@@ -31,20 +33,29 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="h-16 border-b border-slate-800 bg-[#0B0F19]/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-40">
       {/* Brand */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0">
+      <div 
+        onClick={onGoToLanding}
+        className="flex items-center gap-3 cursor-pointer group hover:opacity-90 transition-opacity"
+        title="Return to Landing Page"
+      >
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 via-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0 group-hover:scale-105 transition-transform">
           <Shield className="w-5 h-5 text-white" />
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-bold text-base tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-              Hidden Dependency X-Ray
+            <span className="font-bold text-base tracking-tight bg-gradient-to-r from-white via-violet-200 to-purple-300 bg-clip-text text-transparent">
+              BlindSpot
             </span>
-            <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              HDX 1.0
+            <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+              HDX
             </span>
+            {onGoToLanding && (
+              <span className="text-[10px] text-slate-400 border border-slate-700/60 rounded px-1.5 py-0.5 hover:bg-slate-800">
+                ← Landing
+              </span>
+            )}
           </div>
-          <p className="text-[11px] text-slate-400 hidden sm:block">Know what you depend on. Know what breaks. Know what it costs.</p>
+          <p className="text-[11px] text-slate-400 hidden sm:block">You protect your code, we protect your blindspot.</p>
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import { GraphExplorer } from './components/GraphExplorer';
 import { NodeInspectorDrawer } from './components/NodeInspectorDrawer';
 import { FailureSimulationPanel } from './components/FailureSimulationPanel';
 import { DiscrepancyViewer } from './components/DiscrepancyViewer';
+import { LandingPage } from './components/LandingPage';
 import {
   Network,
   AlertTriangle,
@@ -35,6 +36,7 @@ import {
 } from './api/client';
 
 export const App: React.FC = () => {
+  const [currentView, setCurrentView] = useState<'landing' | 'dashboard'>('landing');
   const [mode, setMode] = useState<'builder' | 'enterprise'>('enterprise');
   const [activeTab, setActiveTab] = useState<'graph' | 'findings' | 'simulation' | 'passports'>('graph');
   const [targetPath, setTargetPath] = useState<string>('./demo/nexus-commerce');
@@ -49,12 +51,12 @@ export const App: React.FC = () => {
   const [durationHours, setDurationHours] = useState<number>(4);
   const [filterLayer, setFilterLayer] = useState<string>('all');
 
-  // Initial load
+  // Initial pre-load of sample demo in background
   useEffect(() => {
-    handleRunScan('./demo/nexus-commerce');
+    handleRunScan('./demo/nexus-commerce', false);
   }, []);
 
-  const handleRunScan = async (pathOverride?: string) => {
+  const handleRunScan = async (pathOverride?: string, shouldSwitchView: boolean = true) => {
     const pathToScan = pathOverride || targetPath;
     setIsScanning(true);
     try {
@@ -70,6 +72,10 @@ export const App: React.FC = () => {
       setFindings(findingsRes);
       setSelectedNode(null);
       setSimulation(null);
+      if (shouldSwitchView) {
+        setCurrentView('dashboard');
+        setActiveTab('graph');
+      }
     } catch (err: any) {
       console.warn('Scan notice:', err);
     } finally {
@@ -93,6 +99,7 @@ export const App: React.FC = () => {
       setSelectedNode(null);
       setSimulation(null);
       setActiveTab('graph');
+      setCurrentView('dashboard');
     } catch (err: any) {
       console.error('File scan failed:', err);
     } finally {
@@ -120,6 +127,19 @@ export const App: React.FC = () => {
 
   const blastRadiusIds = simulation?.impact_results.impacted_node_ids || [];
 
+  if (currentView === 'landing') {
+    return (
+      <LandingPage
+        onScanFiles={handleScanFiles}
+        onExplorePreset={async (path) => {
+          setTargetPath(path);
+          await handleRunScan(path, true);
+        }}
+        isScanning={isScanning}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#080C14] text-slate-100 flex flex-col font-sans">
       {/* 1. Main Navigation Bar */}
@@ -128,9 +148,10 @@ export const App: React.FC = () => {
         setMode={setMode}
         targetPath={targetPath}
         setTargetPath={setTargetPath}
-        onTriggerScan={handleRunScan}
+        onTriggerScan={(p) => handleRunScan(p, true)}
         isScanning={isScanning}
         onOpenKnowledgeModal={() => setIsKnowledgeModalOpen(true)}
+        onGoToLanding={() => setCurrentView('landing')}
       />
 
       {/* 2. Privacy Guarantee Banner */}
