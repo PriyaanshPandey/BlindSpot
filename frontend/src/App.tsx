@@ -84,6 +84,11 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleStartScan = (projectName: string) => {
+    setIsScanning(true);
+    setScanProjectName(projectName);
+  };
+
   const handleScanFiles = async (projectName: string, files: Record<string, string>) => {
     setIsScanning(true);
     setScanProjectName(projectName);
@@ -133,10 +138,14 @@ export const App: React.FC = () => {
 
   if (currentView === 'landing') {
     return (
-      <LandingPage
-        onScanFiles={handleScanFiles}
-        isScanning={isScanning}
-      />
+      <>
+        {isScanning && <AnalysisLoadingOverlay />}
+        <LandingPage
+          onScanFiles={handleScanFiles}
+          onStartScan={handleStartScan}
+          isScanning={isScanning}
+        />
+      </>
     );
   }
 
@@ -171,6 +180,7 @@ export const App: React.FC = () => {
           onScanFiles={async (name, files) => {
             await handleScanFiles(name, files);
           }}
+          onStartScan={handleStartScan}
           filterLayer={filterLayer}
           setFilterLayer={setFilterLayer}
           activeTab={activeTab}

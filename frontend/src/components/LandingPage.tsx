@@ -3,6 +3,7 @@ import { Folder, ArrowRight, ChevronDown } from 'lucide-react';
 
 interface LandingPageProps {
   onScanFiles: (projectName: string, files: Record<string, string>) => Promise<void>;
+  onStartScan?: (projectName: string) => void;
   isScanning: boolean;
 }
 
@@ -15,6 +16,7 @@ const ROTATING_TEXTS = [
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onScanFiles,
+  onStartScan,
   isScanning
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -145,12 +147,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
 
-    setScanStatusText('Reading codebase...');
     let detectedProjectName = 'Target-Project';
     const firstPath = fileList[0].webkitRelativePath || '';
     if (firstPath) {
       detectedProjectName = firstPath.split('/')[0] || detectedProjectName;
     }
+
+    // Trigger loading screen immediately
+    onStartScan?.(detectedProjectName);
+    setScanStatusText('Scanning codebase...');
 
     const filesToRead: Record<string, string> = {};
     const textExtensions = [

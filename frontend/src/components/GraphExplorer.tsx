@@ -10,6 +10,16 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
+  Server,
+  Cpu,
+  Hexagon,
+  Package,
+  Database,
+  Cloud,
+  Star,
+  ShieldAlert,
+  Boxes,
+  X
 } from 'lucide-react';
 import { GraphData, GraphNode } from '../types';
 
@@ -42,15 +52,15 @@ function getTier(node: GraphNode): number {
   return 4;
 }
 
-/** Node colors per tier fallback */
+/** Professional dark theme colors per tier */
 const TIER_COLORS: Record<number, { bg: string; border: string; text: string }> = {
-  0: { bg: '#92400E', border: '#FBBF24', text: '#FEF3C7' },   // amber  – Journey
+  0: { bg: '#854D0E', border: '#FACC15', text: '#FEF08A' },   // amber  – Journey
   1: { bg: '#1E3A8A', border: '#60A5FA', text: '#DBEAFE' },   // blue   – App
   2: { bg: '#4C1D95', border: '#A78BFA', text: '#EDE9FE' },   // violet – Service
   3: { bg: '#083344', border: '#06B6D4', text: '#E0F2FE' },   // cyan   – Subsystem Cluster
   4: { bg: '#1E293B', border: '#64748B', text: '#CBD5E1' },   // slate  – Direct pkg / Infra
   5: { bg: '#0F172A', border: '#334155', text: '#94A3B8' },   // dark   – Transitive
-  6: { bg: '#1A1A2E', border: '#818CF8', text: '#E0E7FF' },   // indigo – Upstream
+  6: { bg: '#1E1B4B', border: '#818CF8', text: '#E0E7FF' },   // indigo – Upstream
 };
 
 export const GraphExplorer: React.FC<GraphExplorerProps> = ({
@@ -62,7 +72,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
-  const [isLegendOpen, setIsLegendOpen] = useState(true);
+  const [isLegendOpen, setIsLegendOpen] = useState(false);
   const [layoutMode, setLayoutMode] = useState<'hierarchical' | 'organic'>('hierarchical');
 
   useEffect(() => {
@@ -98,57 +108,59 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         let bg = TIER_COLORS[tier]?.bg ?? '#1E293B';
         let border = TIER_COLORS[tier]?.border ?? '#64748B';
         let textColor = TIER_COLORS[tier]?.text ?? '#CBD5E1';
-        let w = 44;
-        let h = 34;
+
+        // Generous, clearly visible node dimensions
+        let w = 56;
+        let h = 42;
 
         if (isCluster) {
           bg = '#083344';
           border = '#06B6D4';
           textColor = '#E0F2FE';
-          w = 64;
-          h = 42;
+          w = 72;
+          h = 48;
         } else if (isBundle) {
           bg = '#131A26';
-          border = '#475569';
+          border = '#64748B';
           textColor = '#94A3B8';
-          w = 54;
-          h = 32;
+          w = 60;
+          h = 36;
         } else if (node.type === 'business_journey') {
-          bg = '#92400E';
-          border = '#FBBF24';
-          textColor = '#FEF3C7';
-          w = 54;
-          h = 54;
+          bg = '#854D0E';
+          border = '#FACC15';
+          textColor = '#FEF08A';
+          w = 64;
+          h = 64;
         } else if (node.type === 'application') {
           bg = '#1E3A8A';
           border = '#60A5FA';
           textColor = '#DBEAFE';
-          w = 58;
-          h = 44;
+          w = 68;
+          h = 50;
         } else if (node.type === 'internal_service') {
           bg = '#4C1D95';
           border = '#A78BFA';
           textColor = '#EDE9FE';
-          w = 52;
-          h = 42;
+          w = 62;
+          h = 48;
         } else if (node.type === 'infrastructure_resource') {
           bg = '#064E3B';
           border = '#34D399';
           textColor = '#D1FAE5';
-          w = 48;
-          h = 40;
+          w = 58;
+          h = 46;
         } else if (node.type === 'vendor' || node.type === 'external_api') {
           bg = '#7F1D1D';
           border = '#F87171';
           textColor = '#FEE2E2';
-          w = 46;
-          h = 36;
+          w = 58;
+          h = 42;
         } else if (sub === 'transitive') {
           bg = '#0F172A';
-          border = '#334155';
+          border = '#475569';
           textColor = '#94A3B8';
-          w = 34;
-          h = 26;
+          w = 46;
+          h = 34;
         }
 
         if (isVuln) {
@@ -187,17 +199,17 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       })),
     ];
 
-    // Dagre layout config (top-to-bottom structured DAG)
+    // Dagre layout configuration for top-to-bottom structured DAG
     const dagreLayout: any = {
       name: 'dagre',
       rankDir: 'TB',
       align: 'UL',
-      nodeSep: 55,
-      rankSep: 95,
-      edgeSep: 20,
+      nodeSep: 65,
+      rankSep: 105,
+      edgeSep: 25,
       ranker: 'network-simplex',
       animate: false,
-      padding: 70,
+      padding: 60,
     };
 
     // Organic force layout
@@ -205,8 +217,8 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       name: 'cose',
       animate: false,
       padding: 60,
-      nodeRepulsion: () => 500000,
-      idealEdgeLength: () => 110,
+      nodeRepulsion: () => 600000,
+      idealEdgeLength: () => 120,
       edgeElasticity: () => 150,
       nestingFactor: 1.2,
       gravity: 0.25,
@@ -217,23 +229,26 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       container: containerRef.current,
       elements,
       style: [
-        // Base node
+        // Base node with clear, readable pill label
         {
           selector: 'node',
           style: {
             'label': 'data(label)',
             'color': 'data(textColor)',
-            'font-family': '"Inter", system-ui, sans-serif',
-            'font-size': '10px',
+            'font-family': '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+            'font-size': '11px',
             'font-weight': 'bold',
             'text-valign': 'bottom',
             'text-halign': 'center',
-            'text-margin-y': 6,
-            'text-background-color': '#04020A',
-            'text-background-opacity': 0.88,
-            'text-background-padding': '2px',
+            'text-margin-y': 7,
+            'text-background-color': '#060209',
+            'text-background-opacity': 0.94,
+            'text-background-padding': '3px',
             'text-background-shape': 'roundrectangle',
-            'text-max-width': '120px',
+            'text-border-color': '#231530',
+            'text-border-width': 1,
+            'text-border-opacity': 0.9,
+            'text-max-width': '135px',
             'text-wrap': 'wrap',
             'background-color': 'data(bg)',
             'border-width': 1.5,
@@ -263,7 +278,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           selector: 'node.selected-node',
           style: {
             'border-color': '#FFFFFF',
-            'border-width': 3,
+            'border-width': 3.5,
           },
         },
 
@@ -272,11 +287,11 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           selector: 'node.blast-radius-node',
           style: {
             'border-color': '#FBBF24',
-            'border-width': 3,
+            'border-width': 3.5,
           },
         },
 
-        // Compromised CVE
+        // Compromised CVE (pulsing red border)
         {
           selector: 'node[status = "compromised"]',
           style: {
@@ -308,7 +323,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           },
         },
 
-        // powers_subsystem edge (subsystem flow)
+        // powers_subsystem edge (cyan subsystem flow)
         {
           selector: 'edge[relation = "powers_subsystem"]',
           style: {
@@ -409,9 +424,13 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       }
     });
 
-    // Fit cleanly after layout
+    // Fit cleanly and enforce readable minimum zoom
     cy.one('layoutstop', () => {
-      cy.fit(undefined, 50);
+      cy.fit(undefined, 60);
+      if (cy.zoom() < 0.65) {
+        cy.zoom(0.7);
+        cy.center();
+      }
     });
 
     cyRef.current = cy;
@@ -449,88 +468,144 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
 
   const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.25);
   const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
-  const handleFit = () => cyRef.current?.fit(undefined, 50);
-  const handleReset = () => cyRef.current?.reset();
-
-  const LEGEND_ITEMS = [
-    { color: '#1E3A8A', border: '#60A5FA', label: 'Application (Root)' },
-    { color: '#4C1D95', border: '#A78BFA', label: 'Internal Service' },
-    { color: '#083344', border: '#06B6D4', label: 'Architecture Subsystem' },
-    { color: '#1E293B', border: '#64748B', label: 'Direct Package' },
-    { color: '#131A26', border: '#475569', label: '+ X More Cluster Bundle' },
-    { color: '#0F172A', border: '#334155', label: 'Transitive Sub-dep' },
-    { color: '#064E3B', border: '#34D399', label: 'Infrastructure (DB/Cache)' },
-    { color: '#7F1D1D', border: '#F87171', label: 'Cloud Vendor / API' },
-    { color: '#7F1D1D', border: '#EF4444', label: '⚠ Compromised CVE' },
-  ];
-
-  const EDGE_LEGEND = [
-    { style: 'solid', color: '#0891B2', label: 'Powers subsystem' },
-    { style: 'solid', color: '#6B7280', label: 'Declared dependency' },
-    { style: 'dashed', color: '#475569', label: 'Bundled / Transitive' },
-  ];
+  const handleFit = () => {
+    if (!cyRef.current) return;
+    cyRef.current.fit(undefined, 60);
+    if (cyRef.current.zoom() < 0.65) {
+      cyRef.current.zoom(0.7);
+      cyRef.current.center();
+    }
+  };
+  const handleReset = () => {
+    if (!cyRef.current) return;
+    cyRef.current.reset();
+    handleFit();
+  };
 
   return (
     <div className="w-full h-full relative bg-[#060205] overflow-hidden select-none">
       {/* Cytoscape Canvas */}
       <div ref={containerRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
-      {/* Architecture Notation Legend */}
-      <div className="absolute top-4 left-4 z-20 w-60">
-        <div className="rounded-xl bg-black/80 backdrop-blur-xl border border-white/10 shadow-2xl overflow-hidden">
+      {/* Professional Architecture Map Legend */}
+      <div className="absolute top-4 left-4 z-20">
+        {!isLegendOpen ? (
           <button
-            onClick={() => setIsLegendOpen(!isLegendOpen)}
-            className="w-full px-3 py-2 flex items-center justify-between text-[11px] font-semibold text-slate-200 hover:text-white border-b border-white/[0.06] transition-colors"
+            onClick={() => setIsLegendOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-zinc-800 backdrop-blur-xl shadow-xl text-xs font-medium text-zinc-300 hover:text-white transition-all cursor-pointer"
           >
-            <div className="flex items-center gap-1.5">
-              <Layers className="w-3 h-3 text-cyan-400" />
-              <span>Architecture Map Notation</span>
-            </div>
-            {isLegendOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            <Layers className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Map Legend</span>
+            <ChevronDown className="w-3 h-3 text-zinc-500" />
           </button>
+        ) : (
+          <div className="w-72 rounded-2xl bg-zinc-950/95 border border-zinc-800 backdrop-blur-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Legend Header */}
+            <div className="px-4 py-3 border-b border-zinc-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-cyan-400" />
+                <span className="text-xs font-semibold text-white tracking-wide">Architecture Notation</span>
+              </div>
+              <button
+                onClick={() => setIsLegendOpen(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-          {isLegendOpen && (
-            <div className="p-3 space-y-1.5 text-[10px] text-slate-300">
-              {LEGEND_ITEMS.map((item) => (
-                <div key={item.label} className="flex items-center gap-2">
-                  <span
-                    className="w-3 h-3 rounded-sm shrink-0"
-                    style={{ backgroundColor: item.color, border: `1px solid ${item.border}` }}
-                  />
-                  <span>{item.label}</span>
-                </div>
-              ))}
-              <div className="border-t border-white/[0.06] pt-1.5 mt-1.5 space-y-1 text-[9px] text-slate-400">
-                {EDGE_LEGEND.map((e) => (
-                  <div key={e.label} className="flex items-center gap-2">
-                    <span
-                      className="w-5 h-0 shrink-0"
-                      style={{
-                        borderTop: `2px ${e.style} ${e.color}`,
-                        display: 'inline-block',
-                      }}
-                    />
-                    <span>{e.label}</span>
+            {/* Legend Body */}
+            <div className="p-4 space-y-4 text-xs text-zinc-300">
+              {/* Components */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase block">Components</span>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="flex items-center gap-2">
+                    <Server className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <span>Application</span>
                   </div>
-                ))}
+                  <div className="flex items-center gap-2">
+                    <Cpu className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <span>Service</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Hexagon className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>Subsystem</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Package className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>Direct Pkg</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Database className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>DB / Cache</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Cloud className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    <span>Cloud API</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Star className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Journey</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                    <span>CVE Risk</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Connections */}
+              <div className="border-t border-zinc-800/80 pt-3 space-y-2">
+                <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase block">Connections</span>
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-0.5 bg-cyan-500 rounded" />
+                      <span>Subsystem Power</span>
+                    </div>
+                    <span className="text-zinc-500 text-[10px]">Solid</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-0.5 bg-slate-400 rounded" />
+                      <span>Dependency</span>
+                    </div>
+                    <span className="text-zinc-500 text-[10px]">Solid</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-0 border-t-2 border-dashed border-red-400" />
+                      <span>External API Call</span>
+                    </div>
+                    <span className="text-zinc-500 text-[10px]">Dashed</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-0 border-t-2 border-dotted border-indigo-400" />
+                      <span>Upstream Infra</span>
+                    </div>
+                    <span className="text-zinc-500 text-[10px]">Dotted</span>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Layout + Zoom Controls */}
+      {/* Floating Layout & Viewport Controls */}
       <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2">
-        {/* Layout switcher */}
-        <div className="flex items-center bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl p-1 shadow-xl">
+        {/* Layout Switcher */}
+        <div className="flex items-center bg-zinc-950/80 backdrop-blur-xl border border-zinc-800 rounded-xl p-1 shadow-xl">
           {(['hierarchical', 'organic'] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setLayoutMode(mode)}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                 layoutMode === mode
                   ? 'bg-cyan-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
               {mode === 'hierarchical' ? 'Architecture DAG' : 'Force Graph'}
@@ -538,19 +613,19 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           ))}
         </div>
 
-        {/* Viewport controls */}
-        <div className="flex items-center justify-end gap-1 bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl p-1.5 shadow-xl">
+        {/* Viewport Zoom Controls */}
+        <div className="flex items-center justify-end gap-1 bg-zinc-950/80 backdrop-blur-xl border border-zinc-800 rounded-xl p-1.5 shadow-xl">
           {[
             { icon: <ZoomIn className="w-4 h-4" />, fn: handleZoomIn, title: 'Zoom In' },
             { icon: <ZoomOut className="w-4 h-4" />, fn: handleZoomOut, title: 'Zoom Out' },
-            { icon: <Maximize2 className="w-4 h-4" />, fn: handleFit, title: 'Fit to Screen' },
+            { icon: <Maximize2 className="w-4 h-4" />, fn: handleFit, title: 'Fit Viewport' },
             { icon: <RotateCcw className="w-4 h-4" />, fn: handleReset, title: 'Reset Viewport' },
           ].map(({ icon, fn, title }) => (
             <button
               key={title}
               onClick={fn}
               title={title}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
+              className="p-1.5 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
             >
               {icon}
             </button>

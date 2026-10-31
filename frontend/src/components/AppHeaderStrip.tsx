@@ -5,6 +5,7 @@ interface AppHeaderStripProps {
   projectName: string;
   targetPath: string;
   onScanFiles: (projectName: string, files: Record<string, string>) => Promise<void>;
+  onStartScan?: (projectName: string) => void;
   filterLayer: string;
   setFilterLayer: (layer: string) => void;
   activeTab: string;
@@ -15,6 +16,7 @@ export const AppHeaderStrip: React.FC<AppHeaderStripProps> = ({
   projectName,
   targetPath,
   onScanFiles,
+  onStartScan,
   filterLayer,
   setFilterLayer,
   activeTab,
@@ -31,6 +33,8 @@ export const AppHeaderStrip: React.FC<AppHeaderStripProps> = ({
     if (firstPath) {
       detectedProjectName = firstPath.split('/')[0] || detectedProjectName;
     }
+
+    onStartScan?.(detectedProjectName);
 
     const filesToRead: Record<string, string> = {};
     const textExtensions = [
