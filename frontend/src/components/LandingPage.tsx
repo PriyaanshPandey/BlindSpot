@@ -85,6 +85,61 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     return () => clearTimeout(timeout);
   }, [currentText, isDeleting, textIndex]);
 
+  // 3. Synchronized typing animation for 'code' and 'Blindspot'
+  const [codeText, setCodeText] = useState('code');
+  const [blindspotText, setBlindspotText] = useState('Blindspot');
+  const [taglinePhase, setTaglinePhase] = useState<'hold' | 'delete_blindspot' | 'delete_code' | 'pause' | 'type_code' | 'type_blindspot'>('hold');
+
+  useEffect(() => {
+    let timeout: any;
+    const TARGET_CODE = 'code';
+    const TARGET_BLINDSPOT = 'Blindspot';
+
+    if (taglinePhase === 'hold') {
+      timeout = setTimeout(() => {
+        setTaglinePhase('delete_blindspot');
+      }, 4000);
+    } else if (taglinePhase === 'delete_blindspot') {
+      if (blindspotText.length > 0) {
+        timeout = setTimeout(() => {
+          setBlindspotText((prev) => prev.slice(0, -1));
+        }, 45);
+      } else {
+        setTaglinePhase('delete_code');
+      }
+    } else if (taglinePhase === 'delete_code') {
+      if (codeText.length > 0) {
+        timeout = setTimeout(() => {
+          setCodeText((prev) => prev.slice(0, -1));
+        }, 50);
+      } else {
+        timeout = setTimeout(() => {
+          setTaglinePhase('type_code');
+        }, 400);
+      }
+    } else if (taglinePhase === 'type_code') {
+      if (codeText.length < TARGET_CODE.length) {
+        timeout = setTimeout(() => {
+          setCodeText(TARGET_CODE.slice(0, codeText.length + 1));
+        }, 90);
+      } else {
+        timeout = setTimeout(() => {
+          setTaglinePhase('type_blindspot');
+        }, 150);
+      }
+    } else if (taglinePhase === 'type_blindspot') {
+      if (blindspotText.length < TARGET_BLINDSPOT.length) {
+        timeout = setTimeout(() => {
+          setBlindspotText(TARGET_BLINDSPOT.slice(0, blindspotText.length + 1));
+        }, 80);
+      } else {
+        setTaglinePhase('hold');
+      }
+    }
+
+    return () => clearTimeout(timeout);
+  }, [codeText, blindspotText, taglinePhase]);
+
   // Folder Upload Handler
   const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
@@ -194,15 +249,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             BLINDSPOT
           </h1>
 
-          {/* Balanced Tagline: Pure white text with elegant mint and rose highlights — Single line */}
+          {/* Balanced Tagline: Pure white text with animated typing on 'code' and 'Blindspot' — Single line */}
           <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-[40px] font-semibold text-white tracking-[-0.025em] leading-tight max-w-5xl mx-auto mb-5 sm:whitespace-nowrap">
             You protect your{' '}
-            <span className="text-emerald-400 font-bold drop-shadow-[0_0_14px_rgba(52,211,153,0.35)]">
-              code
+            <span className="inline-flex items-center text-emerald-400 font-bold drop-shadow-[0_0_14px_rgba(52,211,153,0.4)]">
+              {codeText}
+              {(taglinePhase === 'type_code' || taglinePhase === 'delete_code') && (
+                <span className="inline-block w-[2px] h-5 sm:h-7 bg-emerald-400 ml-0.5 animate-pulse" />
+              )}
             </span>
             , We protect your{' '}
-            <span className="text-rose-400 font-bold drop-shadow-[0_0_18px_rgba(251,113,133,0.4)]">
-              Blindspot
+            <span className="inline-flex items-center text-rose-400 font-bold drop-shadow-[0_0_18px_rgba(251,113,133,0.45)]">
+              {blindspotText}
+              {(taglinePhase === 'type_blindspot' || taglinePhase === 'delete_blindspot') && (
+                <span className="inline-block w-[2px] h-5 sm:h-7 bg-rose-400 ml-0.5 animate-pulse" />
+              )}
             </span>
             .
           </h2>
