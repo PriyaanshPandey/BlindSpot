@@ -24,6 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const presets = [
     { label: 'Nexus Commerce (Demo App)', path: './demo/nexus-commerce' },
+    { label: 'CAREER PILOT (Desktop App)', path: 'C:/Users/Priyansh Pandey/OneDrive/Desktop/CAREER PILOT' },
     { label: 'SampleShop (Desktop Test Website)', path: 'C:/Users/Priyansh Pandey/OneDrive/Desktop/SampleShop' }
   ];
 
