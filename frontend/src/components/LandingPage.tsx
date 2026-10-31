@@ -194,8 +194,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             BLINDSPOT
           </h1>
 
-          {/* Balanced Tagline: Pure white text with elegant mint and rose highlights */}
-          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-[42px] font-semibold text-white tracking-[-0.025em] leading-tight max-w-3xl mb-5">
+          {/* Balanced Tagline: Pure white text with elegant mint and rose highlights — Single line */}
+          <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-[40px] font-semibold text-white tracking-[-0.025em] leading-tight max-w-5xl mx-auto mb-5 sm:whitespace-nowrap">
             You protect your{' '}
             <span className="text-emerald-400 font-bold drop-shadow-[0_0_14px_rgba(52,211,153,0.35)]">
               code
@@ -301,6 +301,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
       </section>
+
+      {/* 4. Footer */}
+      <footer className="relative z-10 w-full border-t border-white/[0.06] py-10 px-6 text-center">
+        <p className="text-xs sm:text-sm text-slate-500 font-medium tracking-wide">
+          Made by <span className="text-slate-300 font-semibold hover:text-white transition-colors">Complexity Crushers</span>
+        </p>
+      </footer>
     </div>
   );
 };

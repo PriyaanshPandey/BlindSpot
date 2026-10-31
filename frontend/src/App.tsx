@@ -479,6 +479,12 @@ export const App: React.FC = () => {
         )}
       </main>
 
+      {/* Dashboard Footer */}
+      <footer className="h-9 border-t border-slate-800/80 bg-[#070A12] px-6 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+        <span>BlindSpot HDX</span>
+        <span>Made by <span className="text-slate-400 font-medium">Complexity Crushers</span></span>
+      </footer>
+
       {/* Modals & Dialogs */}
       <KnowledgeStatusBadge
         isOpen={isKnowledgeModalOpen}
