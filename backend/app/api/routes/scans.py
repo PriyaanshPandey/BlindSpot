@@ -21,6 +21,8 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
     project_name = project_data.get("project_name", "Target Project")
     services = project_data.get("services", {})
     overall_deps = project_data.get("dependencies", {})
+    transitives = project_data.get("transitive_dependencies", {})
+    infras = project_data.get("infrastructure_nodes", [])
     observed_hosts = project_data.get("observed_hosts", [])
     evidence_map = project_data.get("evidence_records", {})
 
@@ -28,33 +30,44 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
     is_python = any(s.get("ecosystem") == "PyPI" for s in services.values())
     ecosystem = "PyPI" if is_python else "npm"
 
-    # Query real OSV database
-    vulns = check_vulnerabilities(overall_deps, ecosystem=ecosystem)
+    # Query real OSV database across direct and key transitive packages
+    all_packages_to_check = dict(overall_deps)
+    for parent, child_dict in transitives.items():
+        all_packages_to_check.update(child_dict)
+
+    vulns = check_vulnerabilities(all_packages_to_check, ecosystem=ecosystem)
 
     nodes = []
     edges = []
-
-    # 1. Root Application Node
+    edge_counter = 1
     clean_name = project_name.replace(" ", "-").lower()
+
+    # ----------------------------------------------------
+    # TIER 1: ROOT APPLICATION / CLIENT
+    # ----------------------------------------------------
     app_id = f"app:{clean_name}"
     nodes.append({
         "id": app_id,
-        "label": f"{project_name} (App)",
+        "label": f"{project_name} Application",
         "type": "application",
+        "tier": 1,
         "provenance": "declared",
         "status": "healthy",
         "criticality": "critical",
-        "metadata": {"path": project_data.get("folder_path", "")}
+        "metadata": {
+            "path": project_data.get("folder_path", ""),
+            "description": "Primary client application entrypoint"
+        }
     })
 
-    # 2. Internal Service Nodes
+    # ----------------------------------------------------
+    # TIER 2: INTERNAL SERVICES / MICROSERVICES
+    # ----------------------------------------------------
     service_node_ids = []
-    # If multiple subservices detected, render each; else single core engine
-    active_services = {k: v for k, v in services.items() if v["dependencies"] or v["external_calls"]}
+    active_services = {k: v for k, v in services.items() if v.get("dependencies") or v.get("external_calls")}
     if not active_services:
-        active_services = {"core": {"name": f"{project_name} Engine", "dependencies": overall_deps, "external_calls": observed_hosts}}
+        active_services = {"core": {"name": f"{project_name} Core Engine", "dependencies": overall_deps, "external_calls": observed_hosts}}
 
-    edge_counter = 1
     for s_key, s_data in active_services.items():
         s_id = f"service:{clean_name}-{s_key}"
         service_node_ids.append(s_id)
@@ -62,31 +75,37 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
             "id": s_id,
             "label": s_data.get("name", f"{s_key.capitalize()} Service"),
             "type": "internal_service",
+            "tier": 2,
             "provenance": "declared",
             "status": "healthy",
-            "criticality": "critical"
+            "criticality": "critical",
+            "metadata": {"path": s_data.get("path", "")}
         })
         edges.append({
             "id": f"e_app_to_{s_key}",
             "source": app_id,
             "target": s_id,
-            "relation": "calls_api",
+            "relation": "calls_service",
             "provenance": "declared",
             "confidence_score": 1.0
         })
 
-        # Connect dependencies to this subservice
-        for pkg_name, ver in list(s_data.get("dependencies", {}).items())[:12]:
+        # ----------------------------------------------------
+        # TIER 3: DIRECT CORE PACKAGES (Connected to this service)
+        # ----------------------------------------------------
+        svc_deps = list(s_data.get("dependencies", {}).items())[:12]
+        for pkg_name, ver in svc_deps:
             clean_ver = str(ver).replace("^", "").replace("~", "").replace(">", "").strip()
             is_vuln = any(v["package"] == pkg_name for v in vulns)
             pkg_id = f"pkg:{pkg_name}"
-            
-            # Avoid duplicate nodes
+
             if not any(n["id"] == pkg_id for n in nodes):
                 nodes.append({
                     "id": pkg_id,
                     "label": f"{pkg_name}@{clean_ver}",
                     "type": "software_package",
+                    "subtype": "direct",
+                    "tier": 3,
                     "version": clean_ver,
                     "provenance": "declared",
                     "status": "compromised" if is_vuln else "healthy",
@@ -102,15 +121,81 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
             })
             edge_counter += 1
 
-        # Connect external calls to this subservice
+            # ----------------------------------------------------
+            # TIER 4: TRANSITIVE SUB-PACKAGES (Connected to parent package)
+            # ----------------------------------------------------
+            if pkg_name in transitives:
+                child_deps = list(transitives[pkg_name].items())[:3]
+                for child_pkg, child_ver in child_deps:
+                    clean_cver = str(child_ver).replace("^", "").replace("~", "").replace(">", "").strip()
+                    is_child_vuln = any(v["package"] == child_pkg for v in vulns)
+                    child_id = f"pkg:transitive:{child_pkg}"
+
+                    if not any(n["id"] == child_id for n in nodes):
+                        nodes.append({
+                            "id": child_id,
+                            "label": f"{child_pkg}@{clean_cver}",
+                            "type": "software_package",
+                            "subtype": "transitive",
+                            "tier": 4,
+                            "version": clean_cver,
+                            "provenance": "declared",
+                            "status": "compromised" if is_child_vuln else "healthy",
+                            "criticality": "high" if is_child_vuln else "low"
+                        })
+                    edges.append({
+                        "id": f"e_trans_{edge_counter}",
+                        "source": pkg_id,
+                        "target": child_id,
+                        "relation": "depends_on_transitive",
+                        "provenance": "declared",
+                        "confidence_score": 0.95
+                    })
+                    edge_counter += 1
+
+        # ----------------------------------------------------
+        # TIER 5: INFRASTRUCTURE (Databases, Caches, Queues)
+        # ----------------------------------------------------
+        for inf in infras:
+            inf_id = inf["id"]
+            if not any(n["id"] == inf_id for n in nodes):
+                nodes.append({
+                    "id": inf_id,
+                    "label": inf["name"],
+                    "type": "infrastructure",
+                    "tier": 5,
+                    "category": inf.get("category", "database"),
+                    "provenance": "declared",
+                    "status": "healthy",
+                    "criticality": "critical"
+                })
+            edges.append({
+                "id": f"e_infra_{edge_counter}",
+                "source": s_id,
+                "target": inf_id,
+                "relation": "queries_database" if "database" in inf["name"].lower() else "uses_queue",
+                "provenance": "declared",
+                "confidence_score": 1.0
+            })
+            edge_counter += 1
+
+        # ----------------------------------------------------
+        # TIER 6: EXTERNAL APIS & CLOUD VENDORS
+        # ----------------------------------------------------
         for host in s_data.get("external_calls", set()):
-            is_known_vendor = any(v in host for v in ["stripe.com", "auth0.com", "twilio.com", "sendgrid.com", "firebase", "aws", "cloudflare", "razorpay", "rapidapi", "linkedin", "google"])
+            # Detect vendor vs shadow
+            matched_vendor_key = next((k for k in KNOWN_CLOUD_VENDORS if k in host.lower()), None)
+            is_known_vendor = matched_vendor_key is not None or any(v in host for v in ["stripe.com", "auth0.com", "twilio.com", "sendgrid.com", "firebase", "aws", "cloudflare", "razorpay", "rapidapi", "linkedin", "google"])
             host_id = f"ext:{host}"
+
+            vendor_label = KNOWN_CLOUD_VENDORS[matched_vendor_key]["vendor"] if matched_vendor_key else host
             if not any(n["id"] == host_id for n in nodes):
                 nodes.append({
                     "id": host_id,
-                    "label": host,
+                    "label": vendor_label,
                     "type": "vendor" if is_known_vendor else "external_api",
+                    "tier": 6,
+                    "host": host,
                     "provenance": "declared" if is_known_vendor else "observed",
                     "status": "healthy" if is_known_vendor else "warning",
                     "criticality": "critical" if is_known_vendor else "high"
@@ -125,12 +210,41 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
             })
             edge_counter += 1
 
-    # 3. Business Journey Node
-    journey_id = f"journey:{clean_name}-journey"
+            # ----------------------------------------------------
+            # TIER 7: VENDOR UPSTREAM INFRASTRUCTURE (Vendor Passports)
+            # ----------------------------------------------------
+            if matched_vendor_key and KNOWN_CLOUD_VENDORS[matched_vendor_key].get("upstream"):
+                for up_name in KNOWN_CLOUD_VENDORS[matched_vendor_key]["upstream"][:2]:
+                    up_id = f"upstream:{up_name}"
+                    if not any(n["id"] == up_id for n in nodes):
+                        nodes.append({
+                            "id": up_id,
+                            "label": f"Upstream: {up_name}",
+                            "type": "vendor_upstream",
+                            "tier": 7,
+                            "provenance": "vendor_passport",
+                            "status": "healthy",
+                            "criticality": "high"
+                        })
+                    edges.append({
+                        "id": f"e_up_{edge_counter}",
+                        "source": host_id,
+                        "target": up_id,
+                        "relation": "relies_on_upstream",
+                        "provenance": "vendor_passport",
+                        "confidence_score": 0.90
+                    })
+                    edge_counter += 1
+
+    # ----------------------------------------------------
+    # TIER 0: BUSINESS JOURNEYS (Top Level Business Impact)
+    # ----------------------------------------------------
+    journey_id = f"journey:{clean_name}-checkout"
     nodes.append({
         "id": journey_id,
-        "label": f"Journey: {project_name} Critical Operation",
+        "label": f"Journey: Customer Checkout & Transactions",
         "type": "business_journey",
+        "tier": 0,
         "provenance": "inferred",
         "status": "healthy",
         "criticality": "critical"
@@ -151,6 +265,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
 
     # OSV Vulnerability findings
     for v in vulns:
+        target_node = next((n for n in nodes if n["label"].startswith(v["package"]) or n["id"] == f"pkg:{v['package']}" or n["id"] == f"pkg:transitive:{v['package']}"), None)
         findings.append({
             "id": f"find-{finding_idx:03d}",
             "scan_id": scan_id,
@@ -158,7 +273,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
             "title": f"Live OSV Advisory: {v['package']}@{v['version']} ({v['cve']})",
             "description": v["description"],
             "severity": v["severity"],
-            "target_node_id": f"pkg:{v['package']}",
+            "target_node_id": target_node["id"] if target_node else f"pkg:{v['package']}",
             "affected_journey_ids": [journey_id],
             "evidence_references": ["manifest:package.json" if ecosystem == "npm" else "manifest:requirements.txt"],
             "security_details": {
@@ -175,16 +290,16 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         finding_idx += 1
 
     # Discrepancy findings for unverified / undocumented third-party endpoints
-    unverified_hosts = [h for h in observed_hosts if not any(v in h for v in ["stripe.com", "auth0.com", "github.com", "npmjs.org", "w3.org", "google.com"])]
+    unverified_hosts = [h for h in observed_hosts if not any(v in h for v in ["stripe.com", "auth0.com", "github.com", "npmjs.org", "w3.org", "google.com", "twilio.com", "sendgrid.com", "firebase", "razorpay"])]
     for uh in unverified_hosts:
         ev_list = evidence_map.get(uh, [f"code_reference:{uh}"])
         findings.append({
             "id": f"find-{finding_idx:03d}",
             "scan_id": scan_id,
-            "type": "discrepancy_undeclared_endpoint",
-            "title": f"Undocumented External Connection: {uh}",
-            "description": f"Source code inspection discovered active communication with '{uh}'.",
-            "severity": "high",
+            "type": "architecture_drift_unverified_endpoint",
+            "title": f"Undocumented Third-Party API Endpoint: {uh}",
+            "description": f"Found runtime network call to external host '{uh}' which is absent from declared architecture documentation.",
+            "severity": "medium",
             "target_node_id": f"ext:{uh}",
             "affected_journey_ids": [journey_id],
             "evidence_references": ev_list[:3],
@@ -246,6 +361,8 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         "completed_at": datetime.utcnow().isoformat(),
         "summary": {
             "declared_dependencies": len(overall_deps),
+            "transitive_dependencies": sum(len(c) for c in transitives.values()),
+            "infrastructure_nodes": len(infras),
             "observed_dependencies": len(observed_hosts),
             "discrepancies_found": len(unverified_hosts),
             "vulnerabilities_found": len(vulns),
@@ -266,6 +383,8 @@ async def create_scan(request: ScanRequest):
 @router.post("/direct")
 async def scan_direct_files(payload: DirectPayloadScan):
     deps = {}
+    transitives = {}
+    infras = []
     observed_hosts = set()
     evidence_map = {}
     URL_REGEX = re.compile(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s"\'<>)]*)?')
@@ -280,6 +399,31 @@ async def scan_direct_files(payload: DirectPayloadScan):
                     payload.project_name = pkg_data["name"]
             except Exception:
                 pass
+        elif fname.endswith("package-lock.json"):
+            try:
+                lock_data = json.loads(content)
+                packages = lock_data.get("packages", {})
+                for pkg_path, pkg_info in packages.items():
+                    if pkg_path:
+                        clean_name = pkg_path.replace("node_modules/", "").strip()
+                        child_deps = pkg_info.get("dependencies", {})
+                        if child_deps:
+                            transitives.setdefault(clean_name, {}).update(child_deps)
+            except Exception:
+                pass
+        elif fname.endswith(("docker-compose.yml", "docker-compose.yaml")):
+            service_blocks = re.findall(r'(\b[a-zA-Z0-9_-]+):\s*\n(?:\s+image:\s*([^\n]+))?', content)
+            for s_name, image in service_blocks:
+                lower_name = s_name.lower()
+                infra_type = None
+                if "postgres" in lower_name:
+                    infra_type = "PostgreSQL Database"
+                elif "redis" in lower_name:
+                    infra_type = "Redis Cache"
+                elif "mongo" in lower_name:
+                    infra_type = "MongoDB"
+                if infra_type:
+                    infras.append({"id": f"infra:{s_name}", "name": f"{s_name} ({infra_type})", "category": "database"})
         elif fname.endswith("requirements.txt"):
             for line in content.splitlines():
                 line = line.strip()
@@ -321,6 +465,8 @@ async def scan_direct_files(payload: DirectPayloadScan):
             }
         },
         "dependencies": deps,
+        "transitive_dependencies": transitives,
+        "infrastructure_nodes": infras,
         "observed_hosts": list(observed_hosts),
         "evidence_records": evidence_map
     }

@@ -114,6 +114,42 @@ def test_scan_ecommerce_monorepo_multiservice():
     graph = db.in_memory_graphs[scan_id]
     assert len(graph["nodes"]) >= 8
 
+def test_scan_nexus_commerce_transitive_hierarchy():
+    """Verify lockfile and docker-compose parsing generates true multi-tier hierarchy."""
+    target = os.path.join(WORKSPACE_ROOT, "demo", "nexus-commerce")
+    assert os.path.exists(target), f"Target {target} must exist"
+
+    scan_data = scan_project_directory(target)
+    assert "error" not in scan_data
+    
+    # Verify transitive dependency mapping extracted from package-lock.json
+    transitives = scan_data.get("transitive_dependencies", {})
+    assert "event-stream" in transitives
+    assert "flatmap-stream" in transitives["event-stream"]
+    
+    # Verify infrastructure discovery from docker-compose.yml
+    infra = scan_data.get("infrastructure_nodes", [])
+    assert any("mongodb" in i["name"].lower() for i in infra)
+
+    # Build graph and verify multi-tier relations
+    scan_record = build_unified_graph(scan_data)
+    scan_id = scan_record["scan_id"]
+    graph = db.in_memory_graphs[scan_id]
+    
+    # Check transitive edge connects parent package to child package
+    transitive_edges = [
+        e for e in graph["edges"] if e.get("relation") == "depends_on_transitive"
+    ]
+    assert len(transitive_edges) > 0, "Graph must contain depends_on_transitive hierarchy edges"
+    
+    flatmap_edge = next((e for e in transitive_edges if "flatmap-stream" in e["target"]), None)
+    assert flatmap_edge is not None, "flatmap-stream must have parent edge"
+    assert "event-stream" in flatmap_edge["source"], "flatmap-stream parent must be event-stream"
+
+    # Verify distinct architectural tiers exist across nodes
+    tiers = {n.get("tier") for n in graph["nodes"] if "tier" in n}
+    assert len(tiers) >= 4, f"Graph should feature at least 4 architectural tiers, got: {tiers}"
+
 def test_live_gemini_explain_on_real_finding():
     """Verify Gemini AI generates contextual risk assessment for live finding."""
     sample_context = {
