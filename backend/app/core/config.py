@@ -1,5 +1,8 @@
 import os
-from pydantic_settings import BaseSettings
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    from pydantic import BaseModel as BaseSettings
 from typing import List
 
 class Settings(BaseSettings):
@@ -11,11 +14,17 @@ class Settings(BaseSettings):
     # Server
     HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")
     PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
-    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "*"
+    ]
 
     # Database
     MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-    MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME", "hdx_dependency_db")
+    MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME") or os.getenv("MONGODB_DATABASE") or "blindspot"
 
     # Operating Mode
     HDX_OPERATING_MODE: str = os.getenv("HDX_OPERATING_MODE", "hybrid")

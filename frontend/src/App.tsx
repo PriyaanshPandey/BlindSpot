@@ -8,6 +8,7 @@ import { GraphExplorer } from './components/GraphExplorer';
 import { NodeInspectorDrawer } from './components/NodeInspectorDrawer';
 import { FailureSimulationPanel } from './components/FailureSimulationPanel';
 import { LandingPage } from './components/LandingPage';
+import { ThirdPartyIntelligenceView } from './components/ThirdPartyIntelligenceView';
 import {
   ShieldCheck,
   Flame,
@@ -34,7 +35,7 @@ export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard'>('landing');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [mode, setMode] = useState<'builder' | 'enterprise'>('enterprise');
-  const [activeTab, setActiveTab] = useState<'graph' | 'findings' | 'simulation' | 'passports'>('graph');
+  const [activeTab, setActiveTab] = useState<'graph' | 'findings' | 'simulation' | 'passports' | 'third-party'>('graph');
   const [targetPath, setTargetPath] = useState<string>('./demo/nexus-commerce');
   const [isScanning, setIsScanning] = useState(false);
   const [scanProjectName, setScanProjectName] = useState<string>('Nexus Commerce');
@@ -373,11 +374,11 @@ export const App: React.FC = () => {
                   </p>
                   <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 space-y-2 text-xs">
                     <div className="flex items-center justify-between text-slate-300">
-                      <span>• Amazon Web Services (AWS us-east-1)</span>
+                      <span>ΓÇó Amazon Web Services (AWS us-east-1)</span>
                       <span className="text-purple-400 font-mono text-[11px]">Primary Compute</span>
                     </div>
                     <div className="flex items-center justify-between text-slate-300">
-                      <span>• Cloudflare Global Edge</span>
+                      <span>ΓÇó Cloudflare Global Edge</span>
                       <span className="text-purple-400 font-mono text-[11px]">DDoS & Anycast</span>
                     </div>
                   </div>
@@ -403,11 +404,11 @@ export const App: React.FC = () => {
                   </p>
                   <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 space-y-2 text-xs">
                     <div className="flex items-center justify-between text-slate-300">
-                      <span>• AWS Global Identity Cluster</span>
+                      <span>ΓÇó AWS Global Identity Cluster</span>
                       <span className="text-purple-400 font-mono text-[11px]">Core IdP</span>
                     </div>
                     <div className="flex items-center justify-between text-slate-300">
-                      <span>• Fastly Content Delivery</span>
+                      <span>ΓÇó Fastly Content Delivery</span>
                       <span className="text-purple-400 font-mono text-[11px]">Edge CDN</span>
                     </div>
                   </div>
@@ -420,6 +421,12 @@ export const App: React.FC = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+          {/* Tab 5: Third-Party Intelligence */}
+          {activeTab === 'third-party' && (
+            <div className="p-8 max-w-7xl mx-auto space-y-6 overflow-y-auto h-full">
+              <ThirdPartyIntelligenceView scanId={scan?.scan_id || ''} />
             </div>
           )}
         </main>

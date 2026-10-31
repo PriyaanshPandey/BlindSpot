@@ -1,89 +1,98 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
-from app.db import db
+from typing import Optional, List, Literal
+from app.db.repositories import GraphRepository, FindingRepository, EvidenceRepository, ScanRepository
+from app.graph import GraphEngine
 
 router = APIRouter()
 
+VALID_FILTER_LAYERS = {"all", "declared_only", "observed_only", "discrepancies_only"}
+
 @router.get("/{scan_id}/graph")
-async def get_scan_graph(scan_id: str, filter_layer: str = "all"):
-    # Return dynamic graph stored during create_scan
-    if scan_id in db.in_memory_graphs:
-        return db.in_memory_graphs[scan_id]
-        
-    # Baseline demo graph fallback if someone requests an arbitrary/initial ID
-    nodes = [
-        {"id": "app:nexus-frontend", "label": "Nexus Web Storefront", "type": "application", "provenance": "declared", "status": "healthy", "criticality": "critical"},
-        {"id": "service:nexus-api", "label": "Checkout API Gateway", "type": "internal_service", "provenance": "declared", "status": "healthy", "criticality": "critical"},
-        {"id": "vendor:stripe", "label": "Stripe Payments", "type": "vendor", "provenance": "declared", "status": "healthy", "criticality": "critical"},
-        {"id": "vendor:auth0", "label": "Auth0 Identity", "type": "vendor", "provenance": "declared", "status": "healthy", "criticality": "high"},
-        {"id": "vendor:aws-us-east-1", "label": "AWS US-East-1 (Vendor Subprocessor)", "type": "infrastructure_resource", "provenance": "disclosed", "status": "healthy", "criticality": "critical"},
-        {"id": "pkg:event-stream", "label": "npm: event-stream@3.3.6", "type": "software_package", "provenance": "declared", "status": "compromised", "criticality": "critical"},
-        {"id": "unknown:analytics-cdn", "label": "telemetry.untrusted-cdn.net", "type": "external_api", "provenance": "observed", "status": "warning", "criticality": "high"},
-        {"id": "journey:checkout", "label": "Journey: Customer Checkout", "type": "business_journey", "provenance": "inferred", "status": "healthy", "criticality": "critical"}
-    ]
+async def get_scan_graph(
+    scan_id: str,
+    filter_layer: Literal["all", "declared_only", "observed_only", "discrepancies_only"] = Query(
+        "all",
+        description="Layer filter: all, declared_only, observed_only, discrepancies_only"
+    )
+):
+    if not isinstance(filter_layer, str):
+        filter_layer = getattr(filter_layer, "default", "all")
 
-    edges = [
-        {"id": "e1", "source": "app:nexus-frontend", "target": "service:nexus-api", "relation": "calls_api", "provenance": "declared", "confidence_score": 1.0},
-        {"id": "e2", "source": "service:nexus-api", "target": "vendor:stripe", "relation": "calls_api", "provenance": "declared", "confidence_score": 1.0},
-        {"id": "e3", "source": "service:nexus-api", "target": "vendor:auth0", "relation": "authenticates_via", "provenance": "declared", "confidence_score": 1.0},
-        {"id": "e4", "source": "vendor:stripe", "target": "vendor:aws-us-east-1", "relation": "depends_on", "provenance": "vendor_passport", "confidence_score": 0.95},
-        {"id": "e5", "source": "service:nexus-api", "target": "pkg:event-stream", "relation": "transitive_dependency", "provenance": "declared", "confidence_score": 1.0},
-        {"id": "e6", "source": "app:nexus-frontend", "target": "unknown:analytics-cdn", "relation": "calls_api", "provenance": "observed", "confidence_score": 0.99},
-        {"id": "e7", "source": "vendor:stripe", "target": "journey:checkout", "relation": "powers_journey", "provenance": "inferred", "confidence_score": 1.0}
-    ]
+    if filter_layer not in VALID_FILTER_LAYERS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid filter_layer: '{filter_layer}'. Must be one of: {sorted(list(VALID_FILTER_LAYERS))}"
+        )
+    scan = await ScanRepository.get_scan(scan_id)
+    graph_data = await GraphRepository.get_graph(scan_id)
 
-    return {
-        "scan_id": scan_id,
-        "created_at": datetime.utcnow().isoformat(),
-        "nodes": nodes,
-        "edges": edges,
-        "metadata": {
-            "total_nodes": len(nodes),
-            "total_edges": len(edges),
-            "discrepancy_count": 1,
-            "vulnerability_count": 1
+    if not scan and not graph_data:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    if not graph_data:
+        return {
+            "scan_id": scan_id,
+            "created_at": scan.get("started_at", datetime.utcnow().isoformat()) if scan else datetime.utcnow().isoformat(),
+            "nodes": [],
+            "edges": [],
+            "metadata": {
+                "target_name": scan.get("project_name", "Application") if scan else "Application",
+                "total_nodes": 0,
+                "total_edges": 0,
+                "discrepancy_count": 0,
+                "vulnerability_count": 0
+            }
         }
-    }
+
+    if filter_layer == "all":
+        return graph_data
+
+    # Layer-based filtering using GraphEngine
+    engine = GraphEngine(scan_id=scan_id)
+    engine.created_at = graph_data.get("created_at", datetime.utcnow().isoformat())
+    engine.target_name = graph_data.get("metadata", {}).get("target_name", "Application")
+    for node in graph_data.get("nodes", []):
+        engine.add_node(
+            node_id=node["id"],
+            label=node["label"],
+            node_type=node["type"],
+            subtype=node.get("subtype"),
+            version=node.get("version"),
+            provenance=node.get("provenance", "declared"),
+            status=node.get("status", "healthy"),
+            criticality=node.get("criticality", "medium"),
+            metadata=node.get("metadata")
+        )
+    for edge in graph_data.get("edges", []):
+        engine.add_edge(
+            source=edge["source"],
+            target=edge["target"],
+            relation=edge.get("relation", "depends_on"),
+            provenance=edge.get("provenance", "declared"),
+            confidence_score=edge.get("confidence_score", 1.0),
+            evidence_ids=edge.get("evidence_ids"),
+            metadata=edge.get("metadata"),
+            edge_id=edge.get("id")
+        )
+    return engine.to_dict(filter_layer=filter_layer)
 
 @router.get("/{scan_id}/findings")
 async def get_scan_findings(scan_id: str):
-    if scan_id in db.in_memory_findings:
-        return db.in_memory_findings[scan_id]
-        
-    return [
-        {
-            "id": "find-001",
-            "scan_id": scan_id,
-            "type": "discrepancy_undeclared_endpoint",
-            "title": "Undocumented External Endpoint Observed",
-            "description": "Browser network crawling detected communication with telemetry.untrusted-cdn.net which is absent from declared infrastructure and architecture documentation.",
-            "severity": "high",
-            "target_node_id": "unknown:analytics-cdn",
-            "affected_journey_ids": ["journey:checkout"],
-            "evidence_references": ["trace:span-99120", "playwright:browser-network-log-01"],
-            "remediation": {
-                "summary": "Audit third-party frontend scripts",
-                "recommended_action": "Remove unauthorized script tag from frontend/index.html or declare legitimate vendor with Content-Security-Policy (CSP) headers."
-            }
-        },
-        {
-            "id": "find-002",
-            "scan_id": scan_id,
-            "type": "vulnerability_compromised_package",
-            "title": "Compromised Transitive Dependency Detected",
-            "description": "Package event-stream@3.3.6 contains malicious code injection targeting cryptocurrency wallets and sensitive credentials (CVE-2018-3721).",
-            "severity": "critical",
-            "target_node_id": "pkg:event-stream",
-            "affected_journey_ids": ["journey:checkout"],
-            "security_details": {
-                "cve_id": "CVE-2018-3721",
-                "cvss_score": 9.8,
-                "advisory_source": "OSV / GitHub Security Advisory",
-                "fixed_version": "3.3.7"
-            },
-            "remediation": {
-                "summary": "Upgrade package to non-compromised release",
-                "recommended_action": "Run `npm install event-stream@3.3.7` or remove dependency."
-            }
-        }
-    ]
+    scan = await ScanRepository.get_scan(scan_id)
+    findings = await FindingRepository.get_findings(scan_id)
+
+    if not scan and not findings:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    return findings or []
+
+@router.get("/{scan_id}/evidence")
+async def get_scan_evidence(scan_id: str):
+    scan = await ScanRepository.get_scan(scan_id)
+    evidence = await EvidenceRepository.get_evidence(scan_id)
+
+    if not scan and not evidence:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    return evidence or []

@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 
 interface AppSidebarProps {
-  activeTab: 'graph' | 'findings' | 'simulation' | 'passports';
-  setActiveTab: (tab: 'graph' | 'findings' | 'simulation' | 'passports') => void;
+  activeTab: 'graph' | 'findings' | 'simulation' | 'passports' | 'third-party';
+  setActiveTab: (tab: 'graph' | 'findings' | 'simulation' | 'passports' | 'third-party') => void;
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
   graphNodeCount: number;
@@ -65,6 +65,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       icon: Flame,
       badge: hasActiveSimulation ? 'ACTIVE' : null,
       badgeColor: 'bg-rose-600/30 text-rose-200 border-rose-500/40'
+    },
+    {
+      id: 'third-party' as const,
+      label: 'Third-Party Intelligence',
+      shortLabel: '3rd-Party',
+      icon: ShieldCheck,
+      badge: 'PRO',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
     },
     {
       id: 'passports' as const,

@@ -5,11 +5,17 @@ import uuid
 import os
 import re
 import json
+import tempfile
+import shutil
 from datetime import datetime
 from app.models import ScanRequest
 from app.db import db
+from app.db.repositories import ScanRepository, GraphRepository, FindingRepository, EvidenceRepository
 from app.ingestion import scan_project_directory, KNOWN_CLOUD_VENDORS
 from app.security import check_vulnerabilities
+from app.intelligence.service import ThirdPartyIntelligenceService
+
+intel_service = ThirdPartyIntelligenceService()
 
 router = APIRouter()
 
@@ -57,7 +63,7 @@ def categorize_package(pkg_name: str) -> str:
             return domain["key"]
     return "utilities"
 
-def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
+def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
     scan_id = str(uuid.uuid4())
     project_name = project_data.get("project_name", "Target Project")
     services = project_data.get("services", {})
@@ -487,7 +493,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         })
 
     # ----------------------------------------------------
-    # Generate Findings (OSV + discrepancy)
+    # Generate Findings (OSV + discrepancy + integration)
     # ----------------------------------------------------
     findings = []
     finding_idx = 1
@@ -534,7 +540,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         findings.append({
             "id": f"find-{finding_idx:03d}",
             "scan_id": scan_id,
-            "type": "architecture_drift_unverified_endpoint",
+            "type": "discrepancy_undeclared_endpoint",
             "title": f"Undocumented Endpoint: {uh}",
             "description": f"External network call to '{uh}' is absent from declared architecture.",
             "severity": "medium",
@@ -548,7 +554,78 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         })
         finding_idx += 1
 
-    db.in_memory_graphs[scan_id] = {
+    # ----------------------------------------------------
+    # Third-Party Intelligence & Deep Integration Security Checks
+    # ----------------------------------------------------
+    folder_path = project_data.get("folder_path")
+    if folder_path and os.path.exists(folder_path):
+        try:
+            intel_res = intel_service.analyze_third_party_security(folder_path, observed_hosts=observed_hosts)
+            from app.api.routes.intelligence import _SCAN_INTELLIGENCE_CACHE
+            _SCAN_INTELLIGENCE_CACHE[scan_id] = intel_res
+            for f in intel_res.get("integration_findings", []):
+                sev = f.get("severity", "high")
+                target_node = f.get("target_node_id", "vendor:unknown")
+                findings.append({
+                    "id": f"find-{finding_idx:03d}",
+                    "scan_id": scan_id,
+                    "type": "discrepancy_undeclared_endpoint" if "SUP" in f.get("rule_id", "") else "vulnerability_compromised_package",
+                    "title": f"[{f.get('rule_id')}] {f.get('title')}",
+                    "description": f.get("description", ""),
+                    "severity": sev,
+                    "target_node_id": target_node,
+                    "affected_journey_ids": [f.get("affected_journey", journey_id)],
+                    "evidence_references": [f"rule:{f.get('rule_id')}", f.get("file_path", "source")],
+                    "security_details": {
+                        "cve_id": f.get("rule_id"),
+                        "cvss_score": 9.5 if sev == "critical" else 7.5,
+                        "advisory_source": "BlindSpot Third-Party Intelligence",
+                        "fixed_version": "N/A"
+                    },
+                    "remediation": {
+                        "summary": f.get("explanation", ""),
+                        "recommended_action": f.get("remediation", "")
+                    }
+                })
+                finding_idx += 1
+        except Exception:
+            pass
+
+    # ----------------------------------------------------
+    # Build Evidence Records
+    # ----------------------------------------------------
+    evidence_records = []
+    for pkg, ver in overall_deps.items():
+        evidence_records.append({
+            "id": f"ev:pkg:{pkg}",
+            "evidence_type": "declared",
+            "collected_at": datetime.utcnow().isoformat(),
+            "collector": "npm-manifest-parser" if ecosystem == "npm" else "pypi-parser",
+            "confidence": 1.0,
+            "declared_details": {
+                "file_path": f"{project_data.get('folder_path', '')}/package.json",
+                "manifest_type": "package.json",
+                "raw_declaration": f'"{pkg}": "{ver}"'
+            }
+        })
+    for host in observed_hosts:
+        evidence_records.append({
+            "id": f"ev:trace:{host}",
+            "evidence_type": "observed",
+            "collected_at": datetime.utcnow().isoformat(),
+            "collector": "runtime-trace-processor",
+            "confidence": 0.95,
+            "observed_details": {
+                "source": "otel_trace",
+                "destination_host": host,
+                "protocol": "https"
+            }
+        })
+    db.in_memory_evidence[scan_id] = evidence_records
+
+    discrepancy_count = sum(1 for f in findings if "discrepancy" in f.get("type", ""))
+
+    graph_dict = {
         "scan_id": scan_id,
         "created_at": datetime.utcnow().isoformat(),
         "nodes": nodes,
@@ -556,10 +633,11 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         "metadata": {
             "total_nodes": len(nodes),
             "total_edges": len(edges),
-            "discrepancy_count": len(unverified_hosts),
+            "discrepancy_count": discrepancy_count,
             "vulnerability_count": len(vulns)
         }
     }
+    db.in_memory_graphs[scan_id] = graph_dict
     db.in_memory_findings[scan_id] = findings
 
     # Pre-generate outage scenarios
@@ -597,18 +675,34 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         "status": "completed",
         "started_at": datetime.utcnow().isoformat(),
         "completed_at": datetime.utcnow().isoformat(),
+        "config": {
+            "repo_path": project_data.get("folder_path", ""),
+            "enable_vendor_passports": True
+        },
         "summary": {
             "declared_dependencies": len(overall_deps),
             "transitive_dependencies": sum(len(c) for c in transitives.values()),
             "infrastructure_nodes": len(infras),
             "observed_dependencies": len(observed_hosts),
-            "discrepancies_found": len(unverified_hosts),
+            "discrepancies_found": discrepancy_count,
             "vulnerabilities_found": len(vulns),
             "critical_paths": len(service_node_ids),
             "execution_time_ms": 115.4
         }
     }
     db.in_memory_scans[scan_id] = scan_record
+
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(ScanRepository.save_scan(scan_record))
+            asyncio.create_task(GraphRepository.save_graph(graph_dict))
+            asyncio.create_task(FindingRepository.save_findings(scan_id, findings))
+            asyncio.create_task(EvidenceRepository.save_evidence(scan_id, evidence_records))
+    except Exception:
+        pass
+
     return scan_record
 
 
@@ -617,7 +711,29 @@ async def create_scan(request: ScanRequest):
     project_scan = scan_project_directory(request.repo_path)
     if "error" in project_scan:
         raise HTTPException(status_code=400, detail=project_scan["error"])
-    return build_unified_graph(project_scan)
+
+    if request.trace_file_path and os.path.exists(request.trace_file_path):
+        from app.ingestion import parse_runtime_traces
+        runtime_traces = parse_runtime_traces(request.trace_file_path)
+        obs = project_scan.setdefault("observed_hosts", [])
+        for t in runtime_traces:
+            dest = t.get("destination_host")
+            if dest and dest not in obs:
+                obs.append(dest)
+                project_scan.setdefault("evidence_records", {}).setdefault(dest, []).append(
+                    f"runtime_trace:{t.get('span_id', 'span')}"
+                )
+
+    scan_record = build_unified_graph(project_scan)
+    scan_id = scan_record["scan_id"]
+    await ScanRepository.save_scan(scan_record)
+    if scan_id in db.in_memory_graphs:
+        await GraphRepository.save_graph(db.in_memory_graphs[scan_id])
+    if scan_id in db.in_memory_findings:
+        await FindingRepository.save_findings(scan_id, db.in_memory_findings[scan_id])
+    if scan_id in db.in_memory_evidence:
+        await EvidenceRepository.save_evidence(scan_id, db.in_memory_evidence[scan_id])
+    return scan_record
 
 
 @router.post("/direct")
@@ -629,133 +745,147 @@ async def scan_direct_files(payload: DirectPayloadScan):
     evidence_map = {}
     URL_REGEX = re.compile(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s"\'<>)]*)?')
 
-    for fname, content in payload.files.items():
-        fname_lower = fname.lower()
+    temp_dir = tempfile.mkdtemp(prefix="blindspot_direct_")
+    try:
+        for fname, content in payload.files.items():
+            full_p = os.path.join(temp_dir, fname)
+            os.makedirs(os.path.dirname(full_p), exist_ok=True)
+            with open(full_p, "w", encoding="utf-8") as f:
+                f.write(content)
 
-        if fname_lower.endswith("package.json") and "lock" not in fname_lower:
-            try:
-                pkg_data = json.loads(content)
-                d = {**pkg_data.get("dependencies", {}), **pkg_data.get("devDependencies", {})}
-                deps.update(d)
-                if pkg_data.get("name"):
-                    payload.project_name = pkg_data["name"]
-            except Exception:
-                pass
+            fname_lower = fname.lower()
 
-        elif fname_lower.endswith("package-lock.json"):
-            try:
-                lock_data = json.loads(content)
-                # v2/v3 format
-                packages = lock_data.get("packages", {})
-                for pkg_path, pkg_info in packages.items():
-                    if pkg_path and pkg_path != "":
-                        clean_name = pkg_path.replace("node_modules/", "").strip("/")
-                        child_deps = pkg_info.get("dependencies", {})
-                        if child_deps:
-                            transitives.setdefault(clean_name, {}).update(child_deps)
-                # v1 format
-                v1_deps = lock_data.get("dependencies", {})
-                for parent_name, parent_info in v1_deps.items():
-                    child_deps = parent_info.get("dependencies", {})
-                    if isinstance(child_deps, dict):
-                        for child_name, child_meta in child_deps.items():
-                            ver = child_meta.get("version", "*") if isinstance(child_meta, dict) else str(child_meta)
-                            transitives.setdefault(parent_name, {})[child_name] = ver
-            except Exception:
-                pass
+            if fname_lower.endswith("package.json") and "lock" not in fname_lower:
+                try:
+                    pkg_data = json.loads(content)
+                    d = {**pkg_data.get("dependencies", {}), **pkg_data.get("devDependencies", {})}
+                    deps.update(d)
+                    if pkg_data.get("name"):
+                        payload.project_name = pkg_data["name"]
+                except Exception:
+                    pass
 
-        elif fname_lower.endswith(("requirements.txt", "pipfile")):
-            for line in content.splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    parts = re.split(r'==|>=|<=|~=', line)
-                    pkg = parts[0].strip()
-                    ver = parts[1].strip() if len(parts) > 1 else "*"
-                    deps[pkg] = ver
+            elif fname_lower.endswith("package-lock.json"):
+                try:
+                    lock_data = json.loads(content)
+                    packages = lock_data.get("packages", {})
+                    for pkg_path, pkg_info in packages.items():
+                        if not pkg_path:
+                            continue
+                        clean_pkg = pkg_path.replace("node_modules/", "")
+                        if "dependencies" in pkg_info:
+                            transitives[clean_pkg] = pkg_info["dependencies"]
+                        if not deps.get(clean_pkg) and pkg_info.get("version"):
+                            deps[clean_pkg] = pkg_info["version"]
+                except Exception:
+                    pass
 
-        elif fname_lower.endswith(("docker-compose.yml", "docker-compose.yaml")):
-            service_blocks = re.findall(r'(\b[a-zA-Z0-9_-]+):\s*\n(?:\s+image:\s*([^\n]+))?', content)
-            for s_name, image in service_blocks:
-                lower_name = s_name.lower()
-                lower_image = (image or "").lower()
-                infra_type = None
-                if any(k in lower_name or k in lower_image for k in ["postgres", "pgsql"]):
-                    infra_type = "PostgreSQL Database"
-                elif any(k in lower_name or k in lower_image for k in ["redis", "cache"]):
-                    infra_type = "Redis Cache"
-                elif any(k in lower_name or k in lower_image for k in ["mongo"]):
-                    infra_type = "MongoDB"
-                elif any(k in lower_name or k in lower_image for k in ["rabbit", "mq"]):
-                    infra_type = "RabbitMQ"
-                elif any(k in lower_name or k in lower_image for k in ["mysql", "mariadb"]):
-                    infra_type = "MySQL Database"
-                if infra_type:
-                    infras.append({
-                        "id": f"infra:{s_name}",
-                        "name": f"{s_name.capitalize()} ({infra_type})",
-                        "category": "database",
-                        "image": image.strip() if image else "latest"
-                    })
+            elif fname_lower.endswith(("requirements.txt", "pipfile")):
+                for line in content.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        parts = re.split(r'==|>=|<=|~=', line)
+                        pkg = parts[0].strip()
+                        ver = parts[1].strip() if len(parts) > 1 else "*"
+                        deps[pkg] = ver
 
-        elif ".env" in fname_lower or fname_lower.endswith(".env"):
-            for line in content.splitlines():
-                clean_line = line.strip()
-                if not clean_line or clean_line.startswith("#"):
-                    continue
-                upper = clean_line.upper()
-                for key, info in KNOWN_CLOUD_VENDORS.items():
-                    if key.upper() in upper:
-                        observed_hosts.add(info["host"])
-                        evidence_map.setdefault(info["host"], []).append(f"{fname}: {clean_line.split('=')[0]}")
+            elif fname_lower.endswith(("docker-compose.yml", "docker-compose.yaml")):
+                service_blocks = re.findall(r'(\b[a-zA-Z0-9_-]+):\s*\n(?:\s+image:\s*([^\n]+))?', content)
+                for s_name, image in service_blocks:
+                    lower_name = s_name.lower()
+                    lower_image = (image or "").lower()
+                    infra_type = None
+                    if any(k in lower_name or k in lower_image for k in ["postgres", "pgsql"]):
+                        infra_type = "PostgreSQL Database"
+                    elif any(k in lower_name or k in lower_image for k in ["redis", "cache"]):
+                        infra_type = "Redis Cache"
+                    elif any(k in lower_name or k in lower_image for k in ["mongo"]):
+                        infra_type = "MongoDB"
+                    elif any(k in lower_name or k in lower_image for k in ["rabbit", "mq"]):
+                        infra_type = "RabbitMQ"
+                    elif any(k in lower_name or k in lower_image for k in ["mysql", "mariadb"]):
+                        infra_type = "MySQL Database"
+                    if infra_type:
+                        infras.append({
+                            "id": f"infra:{s_name}",
+                            "name": f"{s_name.capitalize()} ({infra_type})",
+                            "category": "database",
+                            "image": image.strip() if image else "latest"
+                        })
 
-        # URL scan across all files
-        matches = URL_REGEX.findall(content)
-        for m in matches:
-            host_match = re.search(r'https?://([^/:\s]+)', m)
-            if host_match:
-                host = host_match.group(1).lower()
-                if not host.startswith(("localhost", "127.0.0.1", "example.com")) and \
-                   not host.endswith(("schema.org", "w3.org", "npmjs.org", "github.com")):
-                    observed_hosts.add(host)
-                    evidence_map.setdefault(host, []).append(fname)
+            elif ".env" in fname_lower or fname_lower.endswith(".env"):
+                for line in content.splitlines():
+                    clean_line = line.strip()
+                    if not clean_line or clean_line.startswith("#"):
+                        continue
+                    upper = clean_line.upper()
+                    for key, info in KNOWN_CLOUD_VENDORS.items():
+                        if key.upper() in upper:
+                            observed_hosts.add(info["host"])
+                            evidence_map.setdefault(info["host"], []).append(f"{fname}: {clean_line.split('=')[0]}")
 
-    # Enrich with known transitives for common packages
-    from app.ingestion import KNOWN_NODE_TRANSITIVES, KNOWN_PYTHON_TRANSITIVES
-    is_python = any(fname.endswith(("requirements.txt", "pipfile")) for fname in payload.files.keys())
-    for pkg in deps:
-        clean_p = pkg.lower()
-        if clean_p in KNOWN_NODE_TRANSITIVES:
-            transitives.setdefault(pkg, {}).update(KNOWN_NODE_TRANSITIVES[clean_p])
-        elif clean_p in KNOWN_PYTHON_TRANSITIVES:
-            transitives.setdefault(pkg, {}).update(KNOWN_PYTHON_TRANSITIVES[clean_p])
+            matches = URL_REGEX.findall(content)
+            for m in matches:
+                host_match = re.search(r'https?://([^/:\s]+)', m)
+                if host_match:
+                    host = host_match.group(1).lower()
+                    if not host.startswith(("localhost", "127.0.0.1", "example.com")) and \
+                       not host.endswith(("schema.org", "w3.org", "npmjs.org", "github.com")):
+                        observed_hosts.add(host)
+                        evidence_map.setdefault(host, []).append(fname)
 
-    project_data = {
-        "project_name": payload.project_name,
-        "folder_path": "Browser Upload",
-        "services": {
-            "core": {
-                "name": f"{payload.project_name} Core",
-                "dependencies": deps,
-                "external_calls": list(observed_hosts),
-                "ecosystem": "PyPI" if is_python else "npm"
-            }
-        },
-        "dependencies": deps,
-        "transitive_dependencies": transitives,
-        "infrastructure_nodes": infras,
-        "observed_hosts": list(observed_hosts),
-        "evidence_records": evidence_map
-    }
-    return build_unified_graph(project_data)
+        from app.ingestion import KNOWN_NODE_TRANSITIVES, KNOWN_PYTHON_TRANSITIVES
+        is_python = any(fname.endswith(("requirements.txt", "pipfile")) for fname in payload.files.keys())
+        for pkg in deps:
+            clean_p = pkg.lower()
+            if clean_p in KNOWN_NODE_TRANSITIVES:
+                transitives.setdefault(pkg, {}).update(KNOWN_NODE_TRANSITIVES[clean_p])
+            elif clean_p in KNOWN_PYTHON_TRANSITIVES:
+                transitives.setdefault(pkg, {}).update(KNOWN_PYTHON_TRANSITIVES[clean_p])
+
+        project_data = {
+            "project_name": payload.project_name,
+            "folder_path": temp_dir,
+            "services": {
+                "core": {
+                    "name": f"{payload.project_name} Core",
+                    "dependencies": deps,
+                    "external_calls": list(observed_hosts),
+                    "ecosystem": "PyPI" if is_python else "npm"
+                }
+            },
+            "dependencies": deps,
+            "transitive_dependencies": transitives,
+            "infrastructure_nodes": infras,
+            "observed_hosts": list(observed_hosts),
+            "evidence_records": evidence_map
+        }
+        scan_record = build_unified_graph(project_data)
+        return scan_record
+    finally:
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 @router.get("")
 async def list_scans():
+    try:
+        db_scans = await ScanRepository.list_scans()
+        if db_scans:
+            return db_scans
+    except Exception:
+        pass
     return list(db.in_memory_scans.values())
 
 
 @router.get("/{scan_id}")
 async def get_scan(scan_id: str):
+    try:
+        db_scan = await ScanRepository.get_scan(scan_id)
+        if db_scan:
+            return db_scan
+    except Exception:
+        pass
     if scan_id in db.in_memory_scans:
         return db.in_memory_scans[scan_id]
     raise HTTPException(status_code=404, detail="Scan not found")
