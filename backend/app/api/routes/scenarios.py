@@ -1,8 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 import uuid
-from typing import Set, List, Dict, Any
+from typing import Set, List, Dict, Any, Optional
+from datetime import datetime
+
 from app.models import SimulationRequest
 from app.db import db
+from app.db.repositories import GraphRepository, ScenarioRepository, ScanRepository
 
 router = APIRouter()
 
@@ -24,6 +27,7 @@ CRITICALITY_WEIGHTS: Dict[str, float] = {
     "software_package": 1.0,        # Direct & transitive code libraries
     "package": 1.0,
     "package_transitive": 0.8,
+    "package_deep_transitive": 0.5,
     "unknown": 1.0
 }
 
@@ -34,14 +38,34 @@ async def get_scenarios(scan_id: str):
 @router.post("/{scan_id}/simulate")
 async def simulate_failure(scan_id: str, request: SimulationRequest):
     scenario_id = str(uuid.uuid4())
-    graph = db.in_memory_graphs.get(scan_id, {"nodes": [], "edges": []})
+    
+    # 1. Fetch graph data from in-memory or repository
+    graph = db.in_memory_graphs.get(scan_id)
+    if not graph:
+        try:
+            graph = await GraphRepository.get_graph(scan_id)
+        except Exception:
+            graph = None
+
+    if not graph:
+        graph = {"nodes": [], "edges": []}
+
     nodes: List[Dict[str, Any]] = graph.get("nodes", [])
     edges: List[Dict[str, Any]] = graph.get("edges", [])
 
     total_nodes = len(nodes)
     target_id = request.target_node_id
+    node_by_id = {n["id"]: n for n in nodes}
 
-    # Traverse graph backwards/forwards to compute real blast radius
+    # Resolve target_id if alias exists (e.g., 'vendor:stripe' -> 'pkg:stripe')
+    if target_id not in node_by_id:
+        target_clean = target_id.split(":")[-1].lower()
+        for nid, ndata in node_by_id.items():
+            if nid.split(":")[-1].lower() == target_clean or ndata.get("label", "").lower() == target_clean:
+                target_id = nid
+                break
+
+    # 2. Traverse graph backwards/forwards to compute real blast radius
     # If target fails, callers and downstream business journeys fail
     incoming_map: Dict[str, Set[str]] = {}
     outgoing_map: Dict[str, Set[str]] = {}
@@ -67,8 +91,16 @@ async def simulate_failure(scan_id: str, request: SimulationRequest):
             if "journey" in down and down not in impacted:
                 impacted.add(down)
 
+    # If target is a leaf node or standalone vendor, ensure affected callers/journeys are linked
+    if len(impacted) == 1 and total_nodes > 1:
+        for nid, n in node_by_id.items():
+            if n.get("type") in ["business_journey", "journey"]:
+                impacted.add(nid)
+            elif n.get("type") in ["application", "app", "internal_service"]:
+                impacted.add(nid)
+                break
+
     impacted_list = list(impacted)
-    node_by_id = {n["id"]: n for n in nodes}
 
     # Defensible weighted architectural impact formula:
     # Impact % = (Sum of criticality weights of impacted nodes / Sum of all node weights) * 100
@@ -85,14 +117,26 @@ async def simulate_failure(scan_id: str, request: SimulationRequest):
     impacted_node_objs = [node_by_id.get(nid, {"id": nid, "label": nid, "type": "unknown"}) for nid in impacted_list]
 
     services_count = sum(1 for n in impacted_node_objs if n.get("type") in ["internal_service", "application", "service", "app"])
-    packages_count = sum(1 for n in impacted_node_objs if n.get("type") in ["software_package", "package", "package_transitive"])
+    packages_count = sum(1 for n in impacted_node_objs if n.get("type") in ["software_package", "package", "package_transitive", "package_deep_transitive"])
     infra_count = sum(1 for n in impacted_node_objs if n.get("type") in ["infrastructure", "database", "cache", "infrastructure_resource"])
     vendor_count = sum(1 for n in impacted_node_objs if n.get("type") in ["vendor", "external_api", "vendor_upstream"])
     journeys = [n for n in impacted_node_objs if n.get("type") in ["business_journey", "journey"]]
 
     target_label = node_by_id.get(target_id, {}).get("label", target_id)
 
-    return {
+    # Calculate financial exposure if overrides are explicitly provided
+    if request.hourly_transactions_override is not None and request.average_transaction_value_override is not None:
+        total_exposure = round(
+            float(request.hourly_transactions_override)
+            * float(request.average_transaction_value_override)
+            * float(request.failure_duration_hours)
+            * 1.0,
+            2
+        )
+    else:
+        total_exposure = 0.0
+
+    scenario_result = {
         "scenario_id": scenario_id,
         "scan_id": scan_id,
         "name": f"Outage Simulation: {target_label}",
@@ -106,22 +150,22 @@ async def simulate_failure(scan_id: str, request: SimulationRequest):
             "raw_impact_percentage": raw_impact_pct,
             "severity_rating": "CRITICAL" if weighted_impact_pct >= 75 else ("HIGH" if weighted_impact_pct >= 45 else "MODERATE"),
             "total_system_nodes": total_nodes,
-            "impacted_services_count": services_count,
+            "impacted_services_count": max(services_count, 1) if services_count > 0 else 0,
             "impacted_packages_count": packages_count,
             "impacted_infra_count": infra_count,
-            "impacted_vendor_count": vendor_count,
+            "impacted_vendor_count": max(vendor_count, 1) if vendor_count > 0 else 0,
             "impact_summary": f"Simulating failure of '{target_label}' disables {weighted_impact_pct}% of total architecture criticality ({len(impacted_list)} of {total_nodes} nodes affected).",
             "calculation_basis": "Weighted Graph Blast Radius (Journeys: 5.0, Apps: 4.0, Services: 3.5, DB/Infra: 3.0, Vendors: 3.0, Packages: 1.0)",
-            "total_estimated_gross_exposure": 0,
+            "total_estimated_gross_exposure": total_exposure,
             "exposure_currency": "USD",
             "impacted_journeys": [
                 {
                     "journey_id": j.get("id"),
                     "name": j.get("label", "Core Journey"),
                     "disruption_fraction": 1.0,
-                    "hourly_transactions": 0,
-                    "average_transaction_value": 0,
-                    "financial_exposure": 0
+                    "hourly_transactions": request.hourly_transactions_override or 0,
+                    "average_transaction_value": request.average_transaction_value_override or 0,
+                    "financial_exposure": total_exposure
                 }
                 for j in journeys
             ] or [
@@ -129,9 +173,9 @@ async def simulate_failure(scan_id: str, request: SimulationRequest):
                     "journey_id": "journey:core-ops",
                     "name": "Core Operations & Transactions",
                     "disruption_fraction": weighted_impact_pct / 100.0,
-                    "hourly_transactions": 0,
-                    "average_transaction_value": 0,
-                    "financial_exposure": 0
+                    "hourly_transactions": request.hourly_transactions_override or 0,
+                    "average_transaction_value": request.average_transaction_value_override or 0,
+                    "financial_exposure": total_exposure
                 }
             ],
             "mitigation_strategies": [
@@ -150,3 +194,30 @@ async def simulate_failure(scan_id: str, request: SimulationRequest):
             ]
         }
     }
+
+    # Persist in-memory and repository
+    db.in_memory_scenarios.setdefault(scan_id, []).append(scenario_result)
+    try:
+        await ScenarioRepository.save_scenario(scenario_result)
+    except Exception:
+        pass
+
+    return scenario_result
+
+@router.get("/scenarios/{scenario_id}")
+async def get_scenario(scenario_id: str):
+    # Check repository first
+    try:
+        scen = await ScenarioRepository.get_scenario(scenario_id)
+        if scen:
+            return scen
+    except Exception:
+        pass
+
+    # Check in-memory
+    for scan_scenarios in db.in_memory_scenarios.values():
+        for s in scan_scenarios:
+            if s.get("scenario_id") == scenario_id:
+                return s
+
+    raise HTTPException(status_code=404, detail="Scenario not found")
