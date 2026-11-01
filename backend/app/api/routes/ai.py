@@ -19,8 +19,9 @@ class ExplainFindingRequest(BaseModel):
     cve_id: Optional[str] = None
     severity: str = "medium"
     journey_name: Optional[str] = "Customer Checkout"
-    audience: str = Field(default="builder", description="builder (beginner friendly) or enterprise (technical)")
+    audience: str = Field(default="developer", description="Technical explanation for engineers")
     user_approved_transmission: bool = Field(default=True, description="Must be explicitly acknowledged by user")
+    api_key: Optional[str] = Field(default=None, description="Optional user-provided Gemini API key")
 
 class PreviewPayloadRequest(BaseModel):
     finding_id: str

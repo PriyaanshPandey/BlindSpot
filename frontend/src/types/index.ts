@@ -3,6 +3,7 @@ export type NodeType =
   | 'internal_service'
   | 'external_api'
   | 'vendor'
+  | 'vendor_upstream'
   | 'software_package'
   | 'runtime_component'
   | 'infrastructure_resource'
@@ -90,6 +91,15 @@ export interface SimulationResult {
   impact_results: {
     blast_radius_node_count: number;
     impacted_node_ids: string[];
+    impact_percentage?: number;
+    system_impact_percentage?: number;
+    severity_rating?: string;
+    total_system_nodes?: number;
+    impacted_services_count?: number;
+    impacted_packages_count?: number;
+    impacted_infra_count?: number;
+    impacted_vendor_count?: number;
+    impact_summary?: string;
     total_estimated_gross_exposure: number;
     exposure_currency: string;
     impacted_journeys: ImpactedJourney[];
