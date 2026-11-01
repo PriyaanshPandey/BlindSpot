@@ -253,6 +253,7 @@ export interface ChatMessage {
   isAiGenerated?: boolean;
   status?: string;
   isError?: boolean;
+  isTyping?: boolean;
 }
 
 export interface AIChatRequestPayload {

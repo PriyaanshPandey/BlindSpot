@@ -869,23 +869,6 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
 
       {/* Floating Controls */}
       <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2">
-        {/* Layout toggle */}
-        <div className="flex items-center bg-zinc-950/90 backdrop-blur-xl border border-zinc-800 rounded-xl p-1 shadow-xl">
-          {(['hierarchical', 'organic'] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setLayoutMode(mode)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                layoutMode === mode
-                  ? 'bg-cyan-600 text-white shadow-md'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              {mode === 'hierarchical' ? 'Architecture DAG' : 'Force Graph'}
-            </button>
-          ))}
-        </div>
-
         {/* Zoom controls */}
         <div className="flex items-center justify-end gap-1 bg-zinc-950/90 backdrop-blur-xl border border-zinc-800 rounded-xl p-1.5 shadow-xl">
           {[
