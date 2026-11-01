@@ -161,9 +161,32 @@ export interface BundleVerificationSummary {
   };
 }
 
+export interface VerifiedScannerFinding {
+  package_name: string;
+  installed_version: string;
+  cve_id: string;
+  severity: string;
+  affected_version_range?: string;
+  fixed_version?: string | null;
+  cvss_score?: number;
+  advisory_source: string;
+  advisory_description: string;
+  is_verified_vulnerable: boolean;
+  verification_status: string;
+}
+
+export interface ValidationReport {
+  passed: boolean;
+  flags_count: number;
+  flags: string[];
+  checked_against_authoritative: boolean;
+  source_of_truth: string;
+}
+
 export interface AIExplanation {
   finding_id: string;
   target_package: string;
+  version?: string;
   audience: 'builder' | 'enterprise';
   summary: string;
   why_it_matters: string;
@@ -176,6 +199,23 @@ export interface AIExplanation {
   error_message?: string;
   model_used?: string;
   notice: string;
+  verified_scanner_finding?: VerifiedScannerFinding;
+  ai_generated_explanation?: {
+    summary: string;
+    why_it_matters: string;
+    technical_impact: string;
+  };
+  ai_generated_inference?: {
+    architectural_risk_scope: string;
+    inferred_blast_radius: string;
+    ai_hypotheses: string[];
+  };
+  unverified_information?: {
+    has_unverified_claims: boolean;
+    unsupported_claims: string[];
+    advisory_gaps: string[];
+  };
+  validation_report?: ValidationReport;
 }
 
 export interface AIStatusResponse {

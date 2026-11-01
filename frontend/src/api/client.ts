@@ -99,6 +99,9 @@ export async function simulateFailure(
 }
 
 export async function previewAIPayload(finding: Finding, audience: 'builder' | 'enterprise') {
+  const titleMatch = finding.title.match(/@([0-9]+\.[0-9]+(?:\.[0-9]+)?)/);
+  const detectedVersion = titleMatch ? titleMatch[1] : undefined;
+
   const res = await fetch(`${API_BASE}/ai/preview-payload`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -106,9 +109,14 @@ export async function previewAIPayload(finding: Finding, audience: 'builder' | '
       finding_id: finding.id,
       title: finding.title,
       package_name: finding.target_node_id.replace('pkg:', '').replace('ext:', ''),
+      version: detectedVersion,
       cve_id: finding.security_details?.cve_id,
       severity: finding.severity,
-      audience
+      audience,
+      fixed_version: finding.security_details?.fixed_version,
+      cvss_score: finding.security_details?.cvss_score,
+      advisory_source: finding.security_details?.advisory_source,
+      advisory_description: finding.description
     })
   });
   if (!res.ok) throw new Error(`Preview payload failed: ${res.statusText}`);
@@ -121,6 +129,9 @@ export async function explainFindingAI(
   approved: boolean = true,
   apiKey?: string
 ): Promise<AIExplanation> {
+  const titleMatch = finding.title.match(/@([0-9]+\.[0-9]+(?:\.[0-9]+)?)/);
+  const detectedVersion = titleMatch ? titleMatch[1] : undefined;
+
   const res = await fetch(`${API_BASE}/ai/explain`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -128,11 +139,16 @@ export async function explainFindingAI(
       finding_id: finding.id,
       title: finding.title,
       package_name: finding.target_node_id.replace('pkg:', '').replace('ext:', ''),
+      version: detectedVersion,
       cve_id: finding.security_details?.cve_id,
       severity: finding.severity,
       audience,
       user_approved_transmission: approved,
-      api_key: apiKey || undefined
+      api_key: apiKey || undefined,
+      fixed_version: finding.security_details?.fixed_version,
+      cvss_score: finding.security_details?.cvss_score,
+      advisory_source: finding.security_details?.advisory_source,
+      advisory_description: finding.description
     })
   });
   if (!res.ok) throw new Error(`AI explanation failed: ${res.statusText}`);

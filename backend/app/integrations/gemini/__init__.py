@@ -1,3 +1,4 @@
+from app.integrations.gemini.grounding import resolve_authoritative_advisory, validate_and_ground_explanation
 """
 Workstream D: Google Gemini API Integration
 Implements privacy-preserving structured explanations for vulnerabilities and dependency relationships.
@@ -106,15 +107,23 @@ def sanitize_context_for_gemini(raw_context: Dict[str, Any]) -> Dict[str, Any]:
     journey = _strip_canaries(str(raw_context.get("journey_name") or raw_context.get("affected_business_journey") or "Core Business Operation"))
     aud = str(raw_context.get("audience", "builder")).lower()
 
+    authoritative = resolve_authoritative_advisory(
+        package_name=pkg,
+        installed_version=ver,
+        cve_id=cve,
+        provided_details=raw_context.get("security_details") or raw_context
+    )
+
     sanitized = {
         "finding_id": str(raw_context.get("finding_id", "unknown")),
         "title": title,
         "target_package": pkg,
         "version": ver,
-        "cve_id": cve,
-        "severity": sev,
+        "cve_id": authoritative.get("cve_id") or cve,
+        "severity": authoritative.get("severity") or sev,
         "affected_business_journey": journey,
-        "audience": aud
+        "audience": aud,
+        "authoritative_details": authoritative
     }
 
     # Verify that no disallowed keys made it into the sanitized payload
@@ -160,20 +169,40 @@ def get_fallback_explanation(sanitized: Dict[str, Any], error_code: str = STATUS
     if error_message:
         notice_msg += f" — {error_message}"
 
-    return {
-        "finding_id": sanitized.get("finding_id"),
-        "target_package": pkg,
-        "audience": audience,
+    auth = sanitized.get("authoritative_details") or resolve_authoritative_advisory(
+        sanitized.get("target_package", ""),
+        sanitized.get("version", ""),
+        sanitized.get("cve_id")
+    )
+    base_data = {
         "summary": summary,
         "why_it_matters": why_it_matters,
         "technical_impact": f"Supply-chain dependency propagation affecting journey '{journey}' (Severity: {sev.upper()}).",
         "safe_remediation_steps": steps,
-        "confidence_score": 0.95,
+        "confidence_score": 0.95
+    }
+    grounded = validate_and_ground_explanation(base_data, auth, audience)
+
+    return {
+        "finding_id": sanitized.get("finding_id"),
+        "target_package": pkg,
+        "version": ver,
+        "audience": audience,
+        "summary": grounded["summary"],
+        "why_it_matters": grounded["why_it_matters"],
+        "technical_impact": grounded["technical_impact"],
+        "safe_remediation_steps": grounded["safe_remediation_steps"],
+        "confidence_score": grounded["confidence_score"],
         "is_ai_generated": False,
         "is_fallback": True,
         "ai_status": error_code,
         "error_message": error_message,
-        "notice": notice_msg
+        "notice": notice_msg,
+        "verified_scanner_finding": grounded["verified_scanner_finding"],
+        "ai_generated_explanation": grounded["ai_generated_explanation"],
+        "ai_generated_inference": grounded["ai_generated_inference"],
+        "unverified_information": grounded["unverified_information"],
+        "validation_report": grounded["validation_report"]
     }
 
 
@@ -231,22 +260,47 @@ async def explain_finding(raw_context: Dict[str, Any]) -> Dict[str, Any]:
 
     model_name = getattr(settings, "GEMINI_MODEL", None) or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
+    auth = sanitized.get("authoritative_details") or resolve_authoritative_advisory(
+        sanitized["target_package"],
+        sanitized["version"],
+        sanitized.get("cve_id")
+    )
+    status = auth.get("verification_status", "VERIFIED_VULNERABLE")
+    fixed_ver = auth.get("fixed_version")
+    affected_range = auth.get("affected_version_range")
+    desc = auth.get("advisory_description") or "Authoritative advisory finding."
+    source = auth.get("advisory_source") or "Deterministic Vulnerability Scanner"
+
     prompt = f"""You are the security and dependency intelligence engine for BlindSpot.
-Explain this dependency finding strictly in JSON format. Do not include markdown code block ticks (```).
+Your explanation MUST be strictly grounded in the authoritative scanner finding below.
+Do NOT re-evaluate whether the version is vulnerable or invent new version ranges.
 
-AUDIENCE: {sanitized['audience'].upper()} (builder = practical developer patches, commands; enterprise = SRE blast-radius, continuity)
-PACKAGE: {sanitized['target_package']} (version: {sanitized['version']})
-CVE / ADVISORY: {sanitized['cve_id'] or 'Known Vulnerability'}
-SEVERITY: {sanitized['severity']}
-BUSINESS JOURNEY: {sanitized['affected_business_journey']}
+AUTHORITATIVE SOURCE OF TRUTH (Deterministic Scanner):
+- Package: {sanitized['target_package']}
+- Scanned / Installed Version: {sanitized['version']}
+- Advisory / CVE: {sanitized['cve_id'] or 'Known Vulnerability'}
+- Verification Status: {status}
+- Affected Version Range: {affected_range or 'unverified'}
+- Authoritative Fixed Version: {fixed_ver or 'None published'}
+- Severity: {sanitized['severity']} (CVSS: {auth.get('cvss_score', 'N/A')})
+- Advisory Source: {source}
+- Authoritative Advisory Summary: {desc}
+- Business Journey: {sanitized['affected_business_journey']}
+- Audience Perspective: {sanitized['audience'].upper()}
 
-Respond with a valid JSON object matching exactly this schema:
+GROUNDING RULES:
+1. If Verification Status is ALREADY_FIXED: Clearly explain that installed version {sanitized['version']} is NOT vulnerable because it meets or exceeds the fixed version ({fixed_ver}). Do not tell the user to upgrade.
+2. If Verification Status is VERIFIED_VULNERABLE: Explain the real vulnerability as described in the authoritative summary. Only recommend upgrading to the authoritative fixed version ({fixed_ver}).
+3. If Verification Status is MISSING_FIX_INFORMATION: Explicitly state that verification is required before taking action because no fixed release is published.
+4. If Verification Status is UNVERIFIED_ADVISORY: Explicitly state that the advisory is unconfirmed in authoritative databases and needs verification.
+5. Do not invent any CVE numbers, exploit paths, or unverified upgrade versions.
+
+Respond strictly in valid JSON without markdown code fences (```):
 {{
-  "summary": "1-2 sentence overview of the vulnerability",
-  "why_it_matters": "Clear explanation of runtime risk and business continuity impact",
-  "technical_impact": "How it impacts runtime or graph blast radius",
-  "safe_remediation_steps": ["step 1", "step 2", "step 3"],
-  "confidence_score": 0.98
+  "summary": "1-2 sentence overview strictly grounded in the authoritative findings",
+  "why_it_matters": "Business/runtime continuity impact grounded in the finding",
+  "technical_impact": "Technical impact grounded strictly in the authoritative description",
+  "safe_remediation_steps": ["step 1", "step 2", "step 3"]
 }}"""
 
     # Bounded exponential backoff for transient errors (e.g. 503, 429, timeouts)
@@ -277,21 +331,29 @@ Respond with a valid JSON object matching exactly this schema:
 
             data = json.loads(raw_text)
 
-            # Validate response schema
+            # Post-generation authoritative validation layer
+            grounded = validate_and_ground_explanation(data, auth, sanitized["audience"])
+
             return {
                 "finding_id": sanitized.get("finding_id"),
                 "target_package": sanitized.get("target_package"),
+                "version": sanitized.get("version"),
                 "audience": sanitized.get("audience"),
-                "summary": str(data.get("summary", "")),
-                "why_it_matters": str(data.get("why_it_matters", "")),
-                "technical_impact": str(data.get("technical_impact", "")),
-                "safe_remediation_steps": list(data.get("safe_remediation_steps", [])),
-                "confidence_score": float(data.get("confidence_score", 0.98)),
+                "summary": grounded["summary"],
+                "why_it_matters": grounded["why_it_matters"],
+                "technical_impact": grounded["technical_impact"],
+                "safe_remediation_steps": grounded["safe_remediation_steps"],
+                "confidence_score": grounded["confidence_score"],
                 "is_ai_generated": True,
                 "is_fallback": False,
                 "ai_status": STATUS_AI_READY,
                 "model_used": model_name,
-                "notice": f"Live Analysis Powered by Google Gemini ({model_name})."
+                "notice": f"Live Analysis Powered by Google Gemini ({model_name}) — Grounded in Authoritative Advisory ({source}).",
+                "verified_scanner_finding": grounded["verified_scanner_finding"],
+                "ai_generated_explanation": grounded["ai_generated_explanation"],
+                "ai_generated_inference": grounded["ai_generated_inference"],
+                "unverified_information": grounded["unverified_information"],
+                "validation_report": grounded["validation_report"]
             }
 
         except (APIError, ClientError, ServerError, asyncio.TimeoutError, TimeoutError, ValueError, Exception) as exc:

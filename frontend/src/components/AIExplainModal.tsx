@@ -3,6 +3,9 @@ import {
   X,
   Sparkles,
   Shield,
+  ShieldCheck,
+  FileCheck,
+  CheckCircle2,
   CheckSquare,
   Square,
   RefreshCw,
@@ -312,37 +315,142 @@ export const AIExplainModal: React.FC<AIExplainModalProps> = ({
                 </div>
               )}
 
-              {/* Summary */}
-              <div className="p-4 rounded-xl bg-slate-950 border border-purple-500/30 space-y-2">
-                <span className="font-semibold text-white text-xs block">Vulnerability Summary</span>
-                <p className="text-slate-300 leading-relaxed text-xs">{explanation.summary}</p>
-              </div>
+              {/* 1. Verified Scanner Finding (Authoritative Source of Truth) */}
+              {explanation.verified_scanner_finding && (
+                <div className="p-4 rounded-xl bg-slate-950/90 border border-emerald-500/30 space-y-3">
+                  <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 uppercase tracking-wider">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      Verified Scanner Finding (Authoritative Source of Truth)
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${
+                      !explanation.verified_scanner_finding.is_verified_vulnerable || explanation.verified_scanner_finding.verification_status === 'ALREADY_FIXED'
+                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                        : explanation.verified_scanner_finding.verification_status === 'VERIFIED_VULNERABLE'
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                        : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    }`}>
+                      {!explanation.verified_scanner_finding.is_verified_vulnerable || explanation.verified_scanner_finding.verification_status === 'ALREADY_FIXED'
+                        ? 'Version Already Patched'
+                        : explanation.verified_scanner_finding.verification_status === 'VERIFIED_VULNERABLE'
+                        ? 'Verified Vulnerable'
+                        : 'Verification Required'}
+                    </span>
+                  </div>
 
-              {/* Architectural Impact */}
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                <span className="font-semibold text-white text-xs block">
-                  {explanation.audience === 'enterprise' ? 'SRE & Business Continuity Blast Radius' : 'Runtime & Dependency Impact'}
-                </span>
-                <p className="text-slate-300 text-xs leading-relaxed">{explanation.why_it_matters}</p>
-              </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                    <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block uppercase">Package & Version</span>
+                      <strong className="text-white font-mono">{explanation.verified_scanner_finding.package_name}@{explanation.verified_scanner_finding.installed_version}</strong>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block uppercase">Authoritative CVE</span>
+                      <strong className="text-rose-300 font-mono">{explanation.verified_scanner_finding.cve_id || 'N/A'}</strong>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block uppercase">Affected Range</span>
+                      <strong className="text-amber-300 font-mono">{explanation.verified_scanner_finding.affected_version_range || 'All Versions'}</strong>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block uppercase">Authoritative Fix</span>
+                      <strong className="text-emerald-300 font-mono">{explanation.verified_scanner_finding.fixed_version || 'None Published'}</strong>
+                    </div>
+                  </div>
 
-              {/* Technical Impact */}
-              {explanation.technical_impact && (
-                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
-                  <span className="font-semibold text-slate-300 text-xs block">Technical Root Cause</span>
-                  <p className="text-slate-400 text-xs">{explanation.technical_impact}</p>
+                  <p className="text-[11px] text-slate-400 italic">
+                    Source: {explanation.verified_scanner_finding.advisory_source} (CVSS: {explanation.verified_scanner_finding.cvss_score || 'N/A'})
+                  </p>
                 </div>
               )}
 
-              {/* Safe Remediation Steps */}
+              {/* 2. Validation & Grounding Quality Gate Banner */}
+              {explanation.validation_report && (
+                <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
+                  explanation.validation_report.passed
+                    ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                    : 'bg-amber-950/30 border-amber-500/40 text-amber-200'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                      {explanation.validation_report.passed ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          Authoritative Grounding Verified (Zero Hallucinations)
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                          Post-Generation Quality Gate: Unsupported Claims Neutralized
+                        </>
+                      )}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      Source: {explanation.validation_report.source_of_truth}
+                    </span>
+                  </div>
+
+                  {!explanation.validation_report.passed && explanation.validation_report.flags.length > 0 && (
+                    <ul className="text-[11px] text-amber-300/90 list-disc list-inside space-y-0.5">
+                      {explanation.validation_report.flags.map((flag, idx) => (
+                        <li key={idx} className="font-mono text-[10px]">{flag}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {/* 3. AI-Generated Technical Explanation (Grounded in Advisory) */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-purple-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5 uppercase tracking-wider">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                    AI-Generated Technical Explanation (Grounded in Facts)
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400">{explanation.model_used || 'Gemini'}</span>
+                </div>
+                <div className="space-y-1">
+                  <span className="font-semibold text-white text-xs block">Advisory Overview</span>
+                  <p className="text-slate-300 leading-relaxed text-xs">{explanation.summary}</p>
+                </div>
+                <div className="space-y-1 pt-1 border-t border-slate-900">
+                  <span className="font-semibold text-white text-xs block">
+                    {explanation.audience === 'enterprise' ? 'SRE & Business Continuity Blast Radius' : 'Runtime & Dependency Impact'}
+                  </span>
+                  <p className="text-slate-300 text-xs leading-relaxed">{explanation.why_it_matters}</p>
+                </div>
+                {explanation.technical_impact && (
+                  <div className="space-y-1 pt-1 border-t border-slate-900">
+                    <span className="font-semibold text-slate-400 text-xs block">Technical Root Cause</span>
+                    <p className="text-slate-400 text-xs">{explanation.technical_impact}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. AI-Generated Inferences & Journey Impact */}
+              {explanation.ai_generated_inference && (
+                <div className="p-3.5 rounded-xl bg-slate-950/80 border border-blue-500/25 space-y-2 text-xs">
+                  <span className="text-[11px] font-bold text-blue-300 uppercase tracking-wide flex items-center gap-1.5">
+                    <FileCheck className="w-3.5 h-3.5 text-blue-400" />
+                    AI-Generated Inferences & Architecture Blast Radius
+                  </span>
+                  <p className="text-slate-300 text-[11px]">
+                    {explanation.ai_generated_inference.architectural_risk_scope}
+                  </p>
+                  <p className="text-slate-400 text-[11px]">
+                    {explanation.ai_generated_inference.inferred_blast_radius}
+                  </p>
+                </div>
+              )}
+
+              {/* 5. Safe Remediation Steps */}
               <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/20 space-y-2.5">
                 <span className="font-semibold text-emerald-400 text-xs block">
-                  Safe Remediation Steps ({explanation.audience.toUpperCase()} PERSPECTIVE)
+                  Authoritative Safe Remediation Steps ({explanation.audience.toUpperCase()} PERSPECTIVE)
                 </span>
                 <ul className="space-y-2 text-slate-300 text-xs">
                   {explanation.safe_remediation_steps.map((step, idx) => (
                     <li key={idx} className="flex items-start gap-2">
-                      <span className="font-mono text-rose-400 text-[11px] shrink-0 mt-0.5">[{idx + 1}]</span>
+                      <span className="font-mono text-emerald-400 text-[11px] shrink-0 mt-0.5">[{idx + 1}]</span>
                       <span className="leading-relaxed">{step}</span>
                     </li>
                   ))}

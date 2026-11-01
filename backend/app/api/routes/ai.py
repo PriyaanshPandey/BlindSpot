@@ -27,6 +27,12 @@ class ExplainFindingRequest(BaseModel):
     audience: str = Field(default="developer", description="Technical explanation for engineers (builder or enterprise)")
     user_approved_transmission: bool = Field(default=True, description="Must be explicitly acknowledged by user")
     api_key: Optional[str] = Field(default=None, description="Optional user-provided Gemini API key")
+    fixed_version: Optional[str] = None
+    affected_version_range: Optional[str] = None
+    cvss_score: Optional[float] = None
+    advisory_source: Optional[str] = None
+    advisory_description: Optional[str] = None
+    is_verified_vulnerable: Optional[bool] = None
 
 class PreviewPayloadRequest(BaseModel):
     finding_id: str
@@ -38,6 +44,12 @@ class PreviewPayloadRequest(BaseModel):
     severity: str = "medium"
     journey_name: Optional[str] = "Customer Checkout"
     audience: str = "builder"
+    fixed_version: Optional[str] = None
+    affected_version_range: Optional[str] = None
+    cvss_score: Optional[float] = None
+    advisory_source: Optional[str] = None
+    advisory_description: Optional[str] = None
+    is_verified_vulnerable: Optional[bool] = None
 
 class VendorEnrichRequest(BaseModel):
     vendor_domain: str = "stripe.com"
@@ -74,13 +86,14 @@ async def explain_vulnerability(request: ExplainFindingRequest):
             status_code=400,
             detail="User must approve transmission of public vulnerability metadata."
         )
+
     raw_dict = request.model_dump()
-    result = await explain_finding(raw_dict)
-    return result
+    explanation = await explain_finding(raw_dict)
+    return explanation
 
 @router.post("/enrich-vendor")
 async def enrich_vendor(request: VendorEnrichRequest):
     """
-    Retrieves publicly disclosed sub-processors and cloud infrastructure for a third-party vendor.
+    Enriches detected external domain with known third-party cloud sub-processors.
     """
     return await enrich_vendor_profile(request.vendor_domain)
