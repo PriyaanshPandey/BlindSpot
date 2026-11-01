@@ -135,10 +135,10 @@ export const AppHeaderStrip: React.FC<AppHeaderStripProps> = ({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isScanning}
-          className="group relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-200 hover:text-white transition-all text-xs font-semibold shadow-sm cursor-pointer disabled:opacity-50"
+          className="group relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-200 hover:text-white transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 text-xs font-semibold shadow-sm hover:shadow-[0_0_16px_rgba(244,63,94,0.3)] cursor-pointer disabled:opacity-50"
           title="Upload project folder"
         >
-          <FolderPlus className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+          <FolderPlus className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform duration-200" />
           <span className="hidden sm:inline">Folder</span>
         </button>
 
@@ -146,10 +146,10 @@ export const AppHeaderStrip: React.FC<AppHeaderStripProps> = ({
         <button
           onClick={() => zipInputRef.current?.click()}
           disabled={isScanning}
-          className="group relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/70 text-zinc-300 hover:text-white transition-all text-xs font-semibold shadow-sm cursor-pointer disabled:opacity-50"
+          className="group relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 text-slate-300 hover:text-white transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 text-xs font-semibold shadow-sm hover:shadow-[0_0_16px_rgba(56,189,248,0.2)] cursor-pointer disabled:opacity-50"
           title="Upload project .zip archive"
         >
-          <UploadCloud className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+          <UploadCloud className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform duration-200" />
           <span className="hidden sm:inline">.ZIP</span>
         </button>
       </div>

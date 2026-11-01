@@ -116,10 +116,10 @@ export const ThirdPartyIntelligenceView: React.FC<ThirdPartyProps> = ({ scanId }
             <button
               key={tab.id}
               onClick={() => setActiveSection(tab.id as any)}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 cursor-pointer ${
                 activeSection === tab.id
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 font-semibold'
+                  : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -140,7 +140,7 @@ export const ThirdPartyIntelligenceView: React.FC<ThirdPartyProps> = ({ scanId }
             integrations.map((vendor) => (
               <div
                 key={vendor.vendor_id}
-                className="bg-slate-900/90 border border-slate-800 hover:border-indigo-500/50 rounded-xl p-5 space-y-4 transition-all"
+                className="bg-[#111928]/90 hover:bg-[#152033] border border-white/[0.08] hover:border-indigo-500/40 rounded-2xl p-5 space-y-4 transition-all duration-300 ease-out hover:-translate-y-0.5 shadow-lg hover:shadow-[0_16px_36px_-12px_rgba(0,0,0,0.6)]"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-white text-sm">{vendor.vendor_name}</span>

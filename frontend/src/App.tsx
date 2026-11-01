@@ -311,7 +311,7 @@ export const App: React.FC = () => {
                       return (
                         <div
                           key={vendor.id}
-                          className="p-5 rounded-2xl bg-black/60 border border-white/10 space-y-3 shadow-xl backdrop-blur-md hover:border-white/20 transition-all"
+                          className="p-5 rounded-2xl bg-[#111928]/90 hover:bg-[#152033] border border-white/[0.08] hover:border-white/20 space-y-3 shadow-lg hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.7)] hover:-translate-y-0.5 transition-all duration-300 ease-out backdrop-blur-md"
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -352,7 +352,7 @@ export const App: React.FC = () => {
                               setSelectedNode(vendor);
                               handleSimulateOutage(vendor.id, 4);
                             }}
-                            className="w-full py-2 px-3 rounded-xl bg-white/[0.04] hover:bg-white/10 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                            className="w-full py-2 px-3 rounded-xl bg-white/[0.04] hover:bg-white/10 hover:border-white/20 border border-white/10 text-slate-200 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 ease-out hover:scale-[1.01] active:scale-95 cursor-pointer shadow-sm"
                           >
                             <Flame className="w-3.5 h-3.5 text-rose-400" />
                             <span>Simulate Outage & Trace Blast Radius</span>

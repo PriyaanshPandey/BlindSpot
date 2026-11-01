@@ -793,7 +793,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         {!isLegendOpen ? (
           <button
             onClick={() => setIsLegendOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-zinc-800 backdrop-blur-xl shadow-xl text-xs font-medium text-zinc-300 hover:text-white transition-all cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 backdrop-blur-xl shadow-xl text-xs font-medium text-zinc-300 hover:text-white transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 cursor-pointer"
           >
             <Layers className="w-3.5 h-3.5 text-cyan-400" />
             <span>Map Legend</span>

@@ -302,30 +302,30 @@ export const LiveRadarView: React.FC<LiveRadarViewProps> = ({
             const severityStyles = {
               critical: {
                 borderAccent: 'border-l-4 border-l-rose-500',
-                dotColor: 'bg-rose-500 shadow-[0_0_8px_#f43f5e]',
-                cardHover: 'hover:border-rose-500/30'
+                dotColor: 'bg-rose-500 shadow-[0_0_10px_#f43f5e]',
+                cardHover: 'hover:border-rose-500/40 hover:shadow-[0_20px_40px_-15px_rgba(244,63,94,0.18)]'
               },
               high: {
                 borderAccent: 'border-l-4 border-l-orange-500',
-                dotColor: 'bg-orange-500 shadow-[0_0_8px_#f97316]',
-                cardHover: 'hover:border-orange-500/30'
+                dotColor: 'bg-orange-500 shadow-[0_0_10px_#f97316]',
+                cardHover: 'hover:border-orange-500/40 hover:shadow-[0_20px_40px_-15px_rgba(249,115,22,0.18)]'
               },
               medium: {
                 borderAccent: 'border-l-4 border-l-amber-500',
-                dotColor: 'bg-amber-400 shadow-[0_0_8px_#fbbf24]',
-                cardHover: 'hover:border-amber-500/30'
+                dotColor: 'bg-amber-400 shadow-[0_0_10px_#fbbf24]',
+                cardHover: 'hover:border-amber-500/40 hover:shadow-[0_20px_40px_-15px_rgba(251,191,36,0.18)]'
               },
               low: {
                 borderAccent: 'border-l-4 border-l-sky-500',
-                dotColor: 'bg-sky-400 shadow-[0_0_8px_#38bdf8]',
-                cardHover: 'hover:border-sky-500/30'
+                dotColor: 'bg-sky-400 shadow-[0_0_10px_#38bdf8]',
+                cardHover: 'hover:border-sky-500/40 hover:shadow-[0_20px_40px_-15px_rgba(56,189,248,0.18)]'
               }
             }[normSeverity];
 
             return (
               <div
                 key={finding.id}
-                className={`p-4 sm:p-5 rounded-2xl bg-[#111928] hover:bg-[#152033] border border-white/[0.08] ${severityStyles.borderAccent} ${severityStyles.cardHover} transition-all duration-200 space-y-3 shadow-lg hover:shadow-xl backdrop-blur-md`}
+                className={`group p-4 sm:p-5 rounded-2xl bg-[#111928]/90 hover:bg-[#152033] border border-white/[0.08] ${severityStyles.borderAccent} ${severityStyles.cardHover} transition-all duration-300 ease-out hover:-translate-y-0.5 space-y-3 shadow-lg backdrop-blur-md`}
               >
                 {/* Header: Glowing indicator dot + Clean Title (NO high/low badge, NO right-side pkg tag) */}
                 <div className="flex items-center gap-2.5">
@@ -344,19 +344,19 @@ export const LiveRadarView: React.FC<LiveRadarViewProps> = ({
                 <div className="pt-2 pl-5 flex items-center gap-2.5 border-t border-white/[0.05]">
                   <button
                     onClick={() => onTraceInGraph(finding.target_node_id)}
-                    className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-white/[0.05] hover:bg-white/12 border border-white/10 text-slate-300 hover:text-white font-medium text-xs transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-white/[0.04] hover:bg-white/10 hover:border-white/20 border border-white/10 text-slate-300 hover:text-white font-medium text-xs transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 cursor-pointer shadow-sm"
                   >
-                    <Radar className="w-3.5 h-3.5 text-rose-400" />
+                    <Radar className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform duration-200" />
                     <span>Trace in Graph</span>
                   </button>
 
                   <button
                     onClick={() => onExplainAI(finding)}
-                    className="flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-medium text-xs shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-medium text-xs shadow-md shadow-indigo-600/25 hover:shadow-indigo-500/40 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-amber-200" />
                     <span>Explain with Gemini AI</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    <ArrowUpRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                   </button>
                 </div>
               </div>

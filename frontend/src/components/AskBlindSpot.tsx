@@ -499,7 +499,7 @@ export const AskBlindSpot: React.FC<AskBlindSpotProps> = ({
                     <button
                       key={idx}
                       onClick={() => handleSendMessage(prompt)}
-                      className="text-left text-xs p-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 text-slate-300 transition-all cursor-pointer shadow-sm hover:scale-[1.01]"
+                      className="text-left text-xs p-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 hover:border-indigo-500/30 text-slate-300 hover:text-white transition-all duration-200 ease-out cursor-pointer shadow-sm hover:scale-[1.01] hover:shadow-[0_4px_16px_rgba(99,102,241,0.15)] active:scale-[0.99]"
                     >
                       {prompt}
                     </button>
@@ -621,7 +621,7 @@ export const AskBlindSpot: React.FC<AskBlindSpotProps> = ({
               <button
                 disabled={!inputMessage.trim() || isLoading}
                 onClick={() => handleSendMessage()}
-                className="absolute right-2 w-7 h-7 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer shadow-md"
+                className="absolute right-2 w-7 h-7 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all duration-200 ease-out hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-indigo-600/30 hover:shadow-indigo-500/50"
                 title="Send Message"
               >
                 <ArrowUp className="w-4 h-4" />

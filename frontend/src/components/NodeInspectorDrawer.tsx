@@ -204,10 +204,10 @@ export const NodeInspectorDrawer: React.FC<NodeInspectorDrawerProps> = ({
                     <button
                       key={h}
                       onClick={() => handleDurationChange(h)}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-mono transition-all cursor-pointer ${
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-mono transition-all duration-200 ease-out hover:scale-105 active:scale-95 cursor-pointer ${
                         durationHours === h
-                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold'
-                          : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08]'
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold shadow-sm shadow-rose-500/20'
+                          : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08] hover:border-white/10'
                       }`}
                     >
                       {h}h

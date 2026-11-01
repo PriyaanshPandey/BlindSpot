@@ -113,19 +113,19 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center rounded-xl transition-all duration-200 group relative cursor-pointer ${
+                className={`w-full flex items-center rounded-xl transition-all duration-200 ease-out group relative cursor-pointer active:scale-[0.98] ${
                   isCollapsed ? 'justify-center p-3' : 'justify-start px-3.5 py-2.5'
                 } ${
                   isActive
-                    ? 'bg-white/[0.08] border border-white/15 text-white shadow-[0_4px_20px_rgba(0,0,0,0.3)] backdrop-blur-md font-semibold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.03] border border-transparent font-medium'
+                    ? 'bg-white/[0.08] border border-white/15 text-white shadow-[0_4px_24px_rgba(99,102,241,0.2)] backdrop-blur-md font-semibold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] hover:translate-x-0.5 border border-transparent font-medium'
                 }`}
                 title={isCollapsed ? item.label : undefined}
               >
                 <div className="flex items-center gap-3">
                   <Icon
-                    className={`w-4 h-4 transition-transform group-hover:scale-105 ${
-                      isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-200'
+                    className={`w-4 h-4 transition-all duration-200 group-hover:scale-110 ${
+                      isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-white'
                     }`}
                   />
                   {!isCollapsed && (
@@ -148,7 +148,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         {/* Cryptographic Trust Proof Modal Button */}
         <button
           onClick={onOpenKnowledgeModal}
-          className={`w-full flex items-center rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.08] text-slate-300 hover:text-white transition-all cursor-pointer ${
+          className={`w-full flex items-center rounded-xl bg-white/[0.02] hover:bg-white/[0.07] border border-white/[0.08] hover:border-white/20 text-slate-300 hover:text-white transition-all duration-200 ease-out hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-sm hover:shadow-[0_0_16px_rgba(168,85,247,0.15)] ${
             isCollapsed ? 'justify-center p-3' : 'justify-start px-3 py-2.5 gap-2.5'
           }`}
           title="Verify Cryptographic Knowledge Manifest & Trust Anchors"
