@@ -351,12 +351,24 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           },
         },
 
-        // Blast radius highlight
+        // Blast radius / Infected highlight (Vivid Neon Red)
         {
           selector: 'node.blast-radius-node',
           style: {
-            'border-color': '#FBBF24',
-            'border-width': 3.5,
+            'border-color': '#EF4444',
+            'border-width': 4,
+            'background-color': '#7F1D1D',
+            'z-index': 999,
+          },
+        },
+        {
+          selector: 'edge.blast-radius-edge',
+          style: {
+            'line-color': '#EF4444',
+            'target-arrow-color': '#EF4444',
+            'width': 2.8,
+            'opacity': 1,
+            'z-index': 998,
           },
         },
 
@@ -493,6 +505,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
 
     cy.batch(() => {
       cy.nodes().removeClass('blast-radius-node selected-node');
+      cy.edges().removeClass('blast-radius-edge');
 
       if (selectedNodeId) {
         const node = cy.getElementById(selectedNodeId);
@@ -502,10 +515,20 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       }
 
       if (blastRadiusIds.length > 0) {
+        const blastSet = new Set(blastRadiusIds);
         blastRadiusIds.forEach((id) => {
           const node = cy.getElementById(id);
           if (node.length > 0) {
             node.addClass('blast-radius-node');
+          }
+        });
+        cy.edges().forEach((edge) => {
+          const s = edge.data('source');
+          const t = edge.data('target');
+          if (blastSet.has(s) && blastSet.has(t)) {
+            edge.addClass('blast-radius-edge');
+          } else if (blastSet.has(s) || blastSet.has(t)) {
+            edge.addClass('blast-radius-edge');
           }
         });
       }

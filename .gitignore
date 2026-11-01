@@ -46,6 +46,10 @@ playwright-report/
 blob-report/
 playwright/.cache/
 
+# Video files
+/herovideo.mp4
+*.mp4
+
 # Databases
 data/
 mongo-data/

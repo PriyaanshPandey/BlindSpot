@@ -102,8 +102,9 @@ export async function previewAIPayload(finding: Finding, audience: 'builder' | '
 
 export async function explainFindingAI(
   finding: Finding,
-  audience: 'builder' | 'enterprise',
-  approved: boolean = true
+  audience: string = 'developer',
+  approved: boolean = true,
+  apiKey?: string
 ): Promise<AIExplanation> {
   const res = await fetch(`${API_BASE}/ai/explain`, {
     method: 'POST',
@@ -115,7 +116,8 @@ export async function explainFindingAI(
       cve_id: finding.security_details?.cve_id,
       severity: finding.severity,
       audience,
-      user_approved_transmission: approved
+      user_approved_transmission: approved,
+      api_key: apiKey || undefined
     })
   });
   if (!res.ok) throw new Error(`AI explanation failed: ${res.statusText}`);

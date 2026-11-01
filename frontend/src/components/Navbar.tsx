@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Shield, Sparkles, Building2, Play, Lock, RefreshCw, Cpu, FolderOpen, ChevronDown } from 'lucide-react';
+import { Shield, Play, Lock, RefreshCw, Cpu, FolderOpen, ChevronDown } from 'lucide-react';
 
 interface NavbarProps {
-  mode: 'builder' | 'enterprise';
-  setMode: (mode: 'builder' | 'enterprise') => void;
+  mode?: 'builder' | 'enterprise';
+  setMode?: (mode: 'builder' | 'enterprise') => void;
   targetPath: string;
   setTargetPath: (path: string) => void;
   onTriggerScan: (customPath?: string) => void;
@@ -120,39 +120,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
       </div>
 
-      {/* Mode Switcher & Trust Modal */}
+      {/* Trust & Knowledge Modal Trigger */}
       <div className="flex items-center gap-3">
-        {/* Builder vs Enterprise Mode Toggle */}
-        <div className="bg-slate-900/90 p-1 rounded-xl border border-slate-800 flex items-center shadow-inner">
-          <button
-            onClick={() => setMode('builder')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              mode === 'builder'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Builder Mode</span>
-          </button>
-          <button
-            onClick={() => setMode('enterprise')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              mode === 'enterprise'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Enterprise Mode</span>
-          </button>
-        </div>
-
-        {/* Trust & Knowledge Modal Trigger */}
         <button
           onClick={onOpenKnowledgeModal}
           className="flex items-center gap-1.5 bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-slate-200 px-3 py-2 rounded-xl text-xs font-medium transition-all"
-          title="Inspect Signed Knowledge Bundles & Solana Devnet Status"
+          title="Inspect Signed Knowledge Bundles & Cryptographic Trust Proof"
         >
           <Cpu className="w-3.5 h-3.5 text-purple-400" />
           <span className="hidden md:inline">Trust Proof</span>

@@ -1,16 +1,13 @@
 import React from 'react';
 import {
   Network,
-  AlertTriangle,
+  Radar,
   Flame,
   FileCheck2,
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
   ArrowLeft,
-  Sparkles,
-  Building2,
-  Wrench,
   KeyRound
 } from 'lucide-react';
 
@@ -22,8 +19,8 @@ interface AppSidebarProps {
   graphNodeCount: number;
   findingsCount: number;
   hasActiveSimulation: boolean;
-  mode: 'builder' | 'enterprise';
-  setMode: (mode: 'builder' | 'enterprise') => void;
+  mode?: 'builder' | 'enterprise';
+  setMode?: (mode: 'builder' | 'enterprise') => void;
   onOpenKnowledgeModal: () => void;
   onGoToLanding: () => void;
 }
@@ -52,11 +49,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     },
     {
       id: 'findings' as const,
-      label: 'Vulnerabilities & Drift',
-      shortLabel: 'Findings',
-      icon: AlertTriangle,
-      badge: findingsCount > 0 ? `${findingsCount}` : null,
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+      label: 'Live Radar',
+      shortLabel: 'Radar',
+      icon: Radar,
+      badge: findingsCount > 0 ? `${findingsCount}` : 'CLEAR',
+      badgeColor: findingsCount > 0 ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
     },
     {
       id: 'simulation' as const,
@@ -175,51 +172,22 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
       {/* Bottom Controls */}
       <div className="p-3 border-t border-white/[0.08] space-y-2">
-        {/* Solana & Ed25519 Trust Proof Modal Button */}
+        {/* Cryptographic Trust Proof Modal Button */}
         <button
           onClick={onOpenKnowledgeModal}
-          className={`w-full flex items-center rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-200 transition-all ${
+          className={`w-full flex items-center rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-200 transition-all cursor-pointer ${
             isCollapsed ? 'justify-center p-3' : 'px-3 py-2.5 gap-2.5 text-xs font-semibold'
           }`}
-          title="Solana & Ed25519 Cryptographic Trust Proof"
+          title="Cryptographic Ed25519 Trust Proof"
         >
           <KeyRound className="w-4 h-4 text-purple-400 shrink-0" />
-          {!isCollapsed && <span>Solana Trust Proof</span>}
+          {!isCollapsed && <span>Trust Proof</span>}
         </button>
-
-        {/* Builder / Enterprise Audience Mode Switcher */}
-        {!isCollapsed && (
-          <div className="p-2 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between text-[11px]">
-            <span className="text-slate-400 font-medium">Audience</span>
-            <div className="flex items-center gap-1 bg-black/60 p-0.5 rounded-lg border border-white/10">
-              <button
-                onClick={() => setMode('builder')}
-                className={`px-2 py-1 rounded font-semibold transition-all ${
-                  mode === 'builder'
-                    ? 'bg-rose-500 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Builder
-              </button>
-              <button
-                onClick={() => setMode('enterprise')}
-                className={`px-2 py-1 rounded font-semibold transition-all ${
-                  mode === 'enterprise'
-                    ? 'bg-rose-500 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Enterprise
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Return to Landing Button */}
         <button
           onClick={onGoToLanding}
-          className={`w-full flex items-center rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.05] transition-all ${
+          className={`w-full flex items-center rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.05] transition-all cursor-pointer ${
             isCollapsed ? 'justify-center p-3' : 'px-3 py-2 gap-2 text-xs font-medium'
           }`}
           title="Return to Landing Page"

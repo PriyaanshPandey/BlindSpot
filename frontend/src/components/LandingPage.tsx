@@ -198,7 +198,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       }
     }
 
-    setScanStatusText('Analyzing topology & live Google OSV advisories...');
+    setScanStatusText('Scanning codebase...');
     await onScanFiles(detectedProjectName, filesToRead);
   };
 

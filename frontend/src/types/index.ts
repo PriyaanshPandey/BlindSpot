@@ -91,6 +91,13 @@ export interface SimulationResult {
   impact_results: {
     blast_radius_node_count: number;
     impacted_node_ids: string[];
+    impact_percentage?: number;
+    total_system_nodes?: number;
+    impacted_services_count?: number;
+    impacted_packages_count?: number;
+    impacted_infra_count?: number;
+    impacted_vendor_count?: number;
+    impact_summary?: string;
     total_estimated_gross_exposure: number;
     exposure_currency: string;
     impacted_journeys: ImpactedJourney[];

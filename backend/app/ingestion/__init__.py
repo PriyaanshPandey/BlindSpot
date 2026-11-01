@@ -57,23 +57,34 @@ KNOWN_INFRASTRUCTURE = {
 }
 
 KNOWN_NODE_TRANSITIVES = {
+    # 3rd-Party -> 4th-Party Transitives
     "event-stream": {"flatmap-stream": "0.1.1"},
     "express": {"body-parser": "1.20.2", "cookie": "0.6.0", "send": "0.18.0", "serve-static": "1.15.0"},
     "axios": {"follow-redirects": "1.15.6", "form-data": "4.0.0"},
     "jsonwebtoken": {"jws": "3.2.2", "ms": "2.1.3", "semver": "7.5.4"},
     "react-dom": {"scheduler": "0.23.0"},
     "next": {"styled-jsx": "5.1.1", "@next/env": "14.1.0"},
-    "nodemon": {"chokidar": "3.5.3", "debug": "4.3.4"}
+    "nodemon": {"chokidar": "3.5.3", "debug": "4.3.4"},
+    # 4th-Party -> 5th-Party Deep Transitives
+    "body-parser": {"raw-body": "2.4.0", "bytes": "3.1.2", "iconv-lite": "0.4.24"},
+    "send": {"mime": "1.6.0", "fresh": "0.5.2"},
+    "jws": {"jwa": "2.0.0"},
+    "chokidar": {"anymatch": "3.1.3", "braces": "3.0.2"}
 }
 
 KNOWN_PYTHON_TRANSITIVES = {
-    "celery": {"kombu": "5.3.4", "billiard": "4.2.0", "amqp": "5.2.0"},
+    # 3rd-Party -> 4th-Party
+    "celery": {"kombu": "5.3.4", "billiard": "4.2.0"},
     "django": {"asgiref": "3.7.2", "sqlparse": "0.4.4"},
-    "requests": {"urllib3": "1.26.18", "certifi": "2023.11.17", "idna": "3.6"},
+    "requests": {"urllib3": "1.26.18", "certifi": "2023.11.17"},
     "fastapi": {"starlette": "0.27.0", "pydantic-core": "2.14.5"},
     "stripe": {"urllib3": "1.26.18"},
-    "flask": {"werkzeug": "2.3.8", "jinja2": "3.1.2", "click": "8.1.7"},
-    "redis": {"async-timeout": "4.0.3"}
+    "flask": {"werkzeug": "2.3.8", "jinja2": "3.1.2"},
+    "redis": {"async-timeout": "4.0.3"},
+    # 4th-Party -> 5th-Party
+    "kombu": {"amqp": "5.2.0", "vine": "5.0.0"},
+    "urllib3": {"idna": "3.6"},
+    "starlette": {"anyio": "3.7.1"}
 }
 
 def parse_package_json(file_path: str) -> Dict[str, Any]:
