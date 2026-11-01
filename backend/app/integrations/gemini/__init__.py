@@ -26,7 +26,7 @@ load_dotenv(root_dir / ".env")
 load_dotenv(root_dir / "backend" / ".env")
 
 # Model identifier configuration
-DEFAULT_GEMINI_MODEL = getattr(settings, "GEMINI_MODEL", None) or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_GEMINI_MODEL = getattr(settings, "GEMINI_MODEL", None) or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 # Error status constants required by the UX & API contract
 STATUS_AI_READY = "AI_READY"
@@ -200,8 +200,10 @@ def _classify_gemini_error(exc: Exception) -> tuple[str, str]:
             return STATUS_AI_AUTH_FAILED, "Invalid or unauthorized Google Gemini API key."
         if code == 429 or "quota" in msg_lower or "resource_exhausted" in msg_lower or "rate limit" in msg_lower:
             return STATUS_AI_QUOTA_EXCEEDED, "Gemini API rate limit or quota exceeded. Please retry shortly."
-        if code == 404 or "not found" in msg_lower or "model" in msg_lower:
+        if code == 404 or ("not found" in msg_lower and "model" in msg_lower):
             return STATUS_AI_MODEL_UNAVAILABLE, f"Configured Gemini model is unavailable or unsupported."
+        if code == 503 or "503" in msg or "unavailable" in msg_lower or "overloaded" in msg_lower:
+            return STATUS_AI_REQUEST_FAILED, "Google Gemini service temporarily unavailable (503). Server overloaded."
         return STATUS_AI_REQUEST_FAILED, f"Gemini API request failed (HTTP {code}): {msg}"
 
     if "api key not valid" in msg_lower or "api_key_invalid" in msg_lower or "unauthorized" in msg_lower:
@@ -226,7 +228,7 @@ async def explain_finding(raw_context: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("GEMINI_API_KEY not configured. Returning deterministic local explanation.")
         return get_fallback_explanation(sanitized, STATUS_AI_NOT_CONFIGURED, "GEMINI_API_KEY is not configured in backend/.env")
 
-    model_name = getattr(settings, "GEMINI_MODEL", None) or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model_name = getattr(settings, "GEMINI_MODEL", None) or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
     prompt = f"""You are the security and dependency intelligence engine for BlindSpot.
 Explain this dependency finding strictly in JSON format. Do not include markdown code block ticks (```).
@@ -246,8 +248,10 @@ Respond with a valid JSON object matching exactly this schema:
   "confidence_score": 0.98
 }}"""
 
-    # Up to 2 limited retries for transient errors
-    max_retries = 2
+    # Bounded exponential backoff for transient errors (e.g. 503, 429, timeouts)
+    max_retries = 3
+    base_backoff = 1.0
+    max_backoff = 8.0
     last_error_status = STATUS_AI_REQUEST_FAILED
     last_error_message = ""
 
@@ -300,7 +304,10 @@ Respond with a valid JSON object matching exactly this schema:
                 break
 
             if attempt < max_retries - 1:
-                await asyncio.sleep(0.5)
+                # Bounded exponential backoff: attempt 0 -> 1s, attempt 1 -> 2s (capped at max_backoff)
+                backoff_delay = min(max_backoff, base_backoff * (2 ** attempt))
+                logger.info(f"Retrying Gemini call in {backoff_delay:.1f}s (bounded exponential backoff)...")
+                await asyncio.sleep(backoff_delay)
 
     # Return structured error fallback with exact underlying reason
     return get_fallback_explanation(sanitized, last_error_status, last_error_message)

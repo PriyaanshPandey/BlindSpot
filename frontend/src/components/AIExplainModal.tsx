@@ -53,7 +53,7 @@ export const AIExplainModal: React.FC<AIExplainModalProps> = ({
           setAiStatus({
             status: 'AI_UNAVAILABLE_OFFLINE',
             configured: false,
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.6-flash',
             message: 'Backend AI status check failed'
           });
         });
