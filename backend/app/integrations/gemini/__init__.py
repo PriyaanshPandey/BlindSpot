@@ -131,7 +131,8 @@ def get_fallback_explanation(sanitized: Dict[str, Any], error_code: str = STATUS
     Deterministic rule-based explanation when GEMINI_API_KEY is not configured or network fails.
     Preserves local-first analysis and provides actionable status error codes.
     """
-    pkg = sanitized.get("target_package", "package")
+    audience = sanitized.get("audience", "builder")
+    pkg = sanitized.get("target_package", "dependency")
     ver = sanitized.get("version", "unknown")
     cve = sanitized.get("cve_id") or "Security Advisory"
     sev = sanitized.get("severity", "medium")

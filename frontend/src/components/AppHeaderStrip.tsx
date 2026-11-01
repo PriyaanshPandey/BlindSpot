@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Folder, FolderPlus, UploadCloud } from 'lucide-react';
+import { Folder, FolderPlus, UploadCloud, Wrench, Building2 } from 'lucide-react';
 
 interface AppHeaderStripProps {
   projectName: string;
@@ -154,29 +154,61 @@ export const AppHeaderStrip: React.FC<AppHeaderStripProps> = ({
         </button>
       </div>
 
-      {/* Floating Graph Layers (Visible only on Graph tab) */}
-      {activeTab === 'graph' && (
-        <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/10 text-xs">
-          {[
-            { id: 'all', label: 'All Layers' },
-            { id: 'declared_only', label: 'Declared' },
-            { id: 'observed_only', label: 'Observed' },
-            { id: 'discrepancies_only', label: 'Discrepancies' }
-          ].map((tab) => (
+      {/* Mode Toggle & Floating Graph Layers */}
+      <div className="flex items-center gap-3">
+        {setMode && (
+          <div className="bg-black/60 p-1 rounded-xl border border-white/10 flex items-center shadow-inner">
             <button
-              key={tab.id}
-              onClick={() => setFilterLayer(tab.id)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
-                filterLayer === tab.id
-                  ? 'bg-rose-500 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+              onClick={() => setMode('builder')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                mode === 'builder'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
+              title="Builder Mode: Developer Fixes, Terminal Commands & Code Patches"
             >
-              {tab.label}
+              <Wrench className="w-3.5 h-3.5" />
+              <span>Builder Mode</span>
             </button>
-          ))}
-        </div>
-      )}
+            <button
+              onClick={() => setMode('enterprise')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                mode === 'enterprise'
+                  ? 'bg-gradient-to-r from-purple-600 to-rose-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Enterprise Mode: SRE Architecture Blast Radius, Business Continuity & Risk %"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Enterprise Mode</span>
+            </button>
+          </div>
+        )}
+
+        {/* Floating Graph Layers (Visible only on Graph tab) */}
+        {activeTab === 'graph' && (
+          <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/10 text-xs">
+            {[
+              { id: 'all', label: 'All Layers' },
+              { id: 'declared_only', label: 'Declared' },
+              { id: 'observed_only', label: 'Observed' },
+              { id: 'discrepancies_only', label: 'Discrepancies' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setFilterLayer(tab.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                  filterLayer === tab.id
+                    ? 'bg-rose-500 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
