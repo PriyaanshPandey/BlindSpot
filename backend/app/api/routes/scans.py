@@ -16,6 +16,7 @@ from app.ingestion import (
     scan_project_directory,
     extract_package_lock_dependencies,
     resolve_multi_tier_transitives,
+    is_noise_domain,
     KNOWN_CLOUD_VENDORS,
     KNOWN_INFRASTRUCTURE,
     IMPORT_REGEX
@@ -256,6 +257,9 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
 
         processed_vendors = set()
         for host in ext_calls:
+            if is_noise_domain(host):
+                continue
+
             matched_vendor_key = next(
                 (k for k in KNOWN_CLOUD_VENDORS if k in host.lower()), None
             )
@@ -317,6 +321,91 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
                         })
                         edge_counter += 1
             else:
+                host_lower = host.lower()
+                parent_id = s_id
+
+                # 1. Attach Python ecosystem domains under Python
+                if any(k in host_lower for k in ["python.org", "pypi.org"]):
+                    py_pkg_id = "pkg:python"
+                    if not any(n["id"] == py_pkg_id for n in nodes):
+                        has_py = any(s.get("ecosystem") == "PyPI" for s in services.values())
+                        label = "Python (requirements.txt)" if has_py else "Python"
+                        nodes.append({
+                            "id": py_pkg_id,
+                            "label": label,
+                            "type": "software_package",
+                            "subtype": "direct",
+                            "tier": 3,
+                            "version": "runtime",
+                            "provenance": "declared",
+                            "status": "healthy",
+                            "criticality": "medium",
+                            "metadata": {"ecosystem": "PyPI"}
+                        })
+                        edges.append({
+                            "id": f"e_pkg_{edge_counter}",
+                            "source": s_id,
+                            "target": py_pkg_id,
+                            "relation": "depends_on",
+                            "provenance": "declared",
+                            "confidence_score": 1.0
+                        })
+                        edge_counter += 1
+                    parent_id = py_pkg_id
+
+                # 2. Attach Node.js ecosystem domains under package.json / Node.js
+                elif any(k in host_lower for k in ["nodejs.org", "nodejs.com"]):
+                    node_pkg_id = "pkg:nodejs"
+                    if not any(n["id"] == node_pkg_id for n in nodes):
+                        nodes.append({
+                            "id": node_pkg_id,
+                            "label": "Node.js (package.json)",
+                            "type": "software_package",
+                            "subtype": "direct",
+                            "tier": 3,
+                            "version": "runtime",
+                            "provenance": "declared",
+                            "status": "healthy",
+                            "criticality": "medium",
+                            "metadata": {"ecosystem": "npm"}
+                        })
+                        edges.append({
+                            "id": f"e_pkg_{edge_counter}",
+                            "source": s_id,
+                            "target": node_pkg_id,
+                            "relation": "depends_on",
+                            "provenance": "declared",
+                            "confidence_score": 1.0
+                        })
+                        edge_counter += 1
+                    parent_id = node_pkg_id
+
+                # 3. Attach Docker domains under Docker infrastructure
+                elif any(k in host_lower for k in ["docker.com"]):
+                    docker_id = "infra:docker"
+                    if not any(n["id"] == docker_id for n in nodes):
+                        nodes.append({
+                            "id": docker_id,
+                            "label": "Docker (docker-compose.yml)",
+                            "type": "infrastructure_resource",
+                            "tier": 3,
+                            "category": "infrastructure",
+                            "provenance": "declared",
+                            "status": "healthy",
+                            "criticality": "medium",
+                            "metadata": {"image": "docker"}
+                        })
+                        edges.append({
+                            "id": f"e_infra_{edge_counter}",
+                            "source": s_id,
+                            "target": docker_id,
+                            "relation": "queries_database",
+                            "provenance": "declared",
+                            "confidence_score": 1.0
+                        })
+                        edge_counter += 1
+                    parent_id = docker_id
+
                 # Direct observed external / shadow API with real health probe status
                 host_id = f"ext:{host}"
                 probe = endpoint_probes.get(host, {})
@@ -343,7 +432,7 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
                     })
                 edges.append({
                     "id": f"e_ext_{edge_counter}",
-                    "source": s_id,
+                    "source": parent_id,
                     "target": host_id,
                     "relation": "calls_api",
                     "provenance": "observed",
@@ -744,8 +833,7 @@ async def scan_direct_files(payload: DirectPayloadScan):
                 host_match = re.search(r'https?://([^/:\s]+)', m)
                 if host_match:
                     host = host_match.group(1).lower()
-                    if not host.startswith(("localhost", "127.0.0.1", "example.com")) and \
-                       not host.endswith(("schema.org", "w3.org", "npmjs.org", "github.com")):
+                    if not host.startswith(("localhost", "127.0.0.1", "example.com")) and not is_noise_domain(host):
                         observed_hosts.add(host)
                         evidence_map.setdefault(host, []).append(fname)
 

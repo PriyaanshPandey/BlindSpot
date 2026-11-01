@@ -16,6 +16,24 @@ IMPORT_REGEX = re.compile(r"(?:import\s+.*?from\s+['\"]([^'\"./][^'\"]*)['\"]|re
 
 EXCLUDED_DIRS = {".git", "node_modules", "dist", "build", ".venv", "venv", "__pycache__", ".idea", ".vscode", "coverage"}
 
+# Non-API noise domains: author blogs, personal websites, sponsorship links, static asset CDNs, and specification schemas
+NOISE_DOMAINS = {
+    # Author personal blogs / developer links found in open-source licenses
+    "paulmillr.com", "feross.org", "sindresorhus.com", "tjholowaychuk.com", "substack.com", "medium.com", "dev.to",
+    # Funding / donations / author sponsors
+    "opencollective.com", "patreon.com", "tidelift.com", "buymeacoffee.com", "ko-fi.com",
+    # Static fonts and asset CDNs
+    "fonts.googleapis.com", "fonts.gstatic.com", "use.fontawesome.com", "cdn.jsdelivr.net", "unpkg.com",
+    # Generic schemas / standard specs
+    "schema.org", "w3.org", "json-schema.org", "xml.org", "xmlns.com", "example.com", "example.org",
+    # Standard source registries (not runtime APIs)
+    "github.com", "gitlab.com", "bitbucket.org", "npmjs.org"
+}
+
+def is_noise_domain(host: str) -> bool:
+    h = str(host).lower().strip()
+    return any(h == d or h.endswith("." + d) for d in NOISE_DOMAINS)
+
 KNOWN_CLOUD_VENDORS = {
     "firebase": {"vendor": "Firebase (Google Cloud)", "host": "firebase.google.com", "category": "backend_platform", "upstream": ["google-cloud-us-central1"]},
     "razorpay": {"vendor": "Razorpay Payments", "host": "api.razorpay.com", "category": "payment_gateway", "upstream": ["aws-ap-south-1", "cloudflare-edge"]},
@@ -408,7 +426,7 @@ def scan_project_directory(folder_path: str) -> Dict[str, Any]:
                         host_match = re.search(r'https?://([^/:\s]+)', m)
                         if host_match:
                             host = host_match.group(1).lower()
-                            if not host.startswith(("localhost", "127.0.0.1")) and not host.endswith(("schema.org", "w3.org", "github.com", "npmjs.org")):
+                            if not host.startswith(("localhost", "127.0.0.1")) and not is_noise_domain(host):
                                 observed_hosts.add(host)
                                 services[subservice_key]["external_calls"].add(host)
                                 evidence_records.setdefault(host, []).append(f"{rel_file}")
