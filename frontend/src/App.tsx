@@ -31,6 +31,7 @@ import {
 import {
   createScan,
   scanUploadedFiles,
+  uploadZipScan,
   getScanGraph,
   getScanFindings,
   simulateFailure
@@ -84,6 +85,34 @@ export const App: React.FC = () => {
       console.warn('Scan notice:', err);
     } finally {
       // Keep loading overlay smooth for a minimum period
+      setTimeout(() => {
+        setIsScanning(false);
+      }, 1600);
+    }
+  };
+
+  const handleScanZip = async (file: File) => {
+    setIsScanning(true);
+    const cleanName = file.name.replace(/\.zip$/i, '');
+    setScanProjectName(cleanName);
+    try {
+      const scanRes = await uploadZipScan(file);
+      setScan(scanRes);
+
+      const [graphRes, findingsRes] = await Promise.all([
+        getScanGraph(scanRes.scan_id),
+        getScanFindings(scanRes.scan_id)
+      ]);
+
+      setGraphData(graphRes);
+      setFindings(findingsRes);
+      setSelectedNode(null);
+      setSimulation(null);
+      setActiveTab('graph');
+      setCurrentView('dashboard');
+    } catch (err: any) {
+      console.error('ZIP scan failed:', err);
+    } finally {
       setTimeout(() => {
         setIsScanning(false);
       }, 1600);
@@ -146,6 +175,7 @@ export const App: React.FC = () => {
     return (
       <LandingPage
         onScanFiles={handleScanFiles}
+        onScanZip={handleScanZip}
         onStartScan={handleStartScan}
         isScanning={isScanning}
       />
@@ -181,6 +211,7 @@ export const App: React.FC = () => {
           onScanFiles={async (name, files) => {
             await handleScanFiles(name, files);
           }}
+          onScanZip={handleScanZip}
           onStartScan={handleStartScan}
           filterLayer={filterLayer}
           setFilterLayer={setFilterLayer}

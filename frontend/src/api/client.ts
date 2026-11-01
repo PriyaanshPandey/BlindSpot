@@ -43,6 +43,20 @@ export async function scanUploadedFiles(projectName: string, files: Record<strin
   return res.json();
 }
 
+export async function uploadZipScan(file: File): Promise<ScanSummary> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_BASE}/scans/upload-zip`, {
+    method: 'POST',
+    body: formData
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(errText || `ZIP archive scan failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 export async function getScan(scanId: string): Promise<ScanSummary> {
   const res = await fetch(`${API_BASE}/scans/${scanId}`);
   if (!res.ok) throw new Error(`Fetch scan failed: ${res.statusText}`);

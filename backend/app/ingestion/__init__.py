@@ -99,41 +99,106 @@ def parse_package_json(file_path: str) -> Dict[str, Any]:
         logger.warning(f"Failed to parse package.json at {file_path}: {e}")
         return {}
 
-def parse_package_lock_json(file_path: str) -> Dict[str, Dict[str, str]]:
+def extract_clean_pkg_name(pkg_path: str) -> str:
     """
-    Parses package-lock.json to extract true parent-child transitive dependencies.
-    Returns: { "event-stream": { "flatmap-stream": "0.1.1" }, ... }
+    Extracts canonical package name from node_modules path.
+    Handles scoped packages (@medusajs/medusa, @types/node) as well as standard packages.
     """
-    if not os.path.exists(file_path):
-        return {}
-    results: Dict[str, Dict[str, str]] = {}
-    try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            data = json.load(f)
+    if not pkg_path:
+        return ""
+    clean = pkg_path.strip("/")
+    if "node_modules/" in clean:
+        clean = clean.split("node_modules/")[-1].strip("/")
+    return clean
 
-        # Support npm lockfile v2 & v3 (packages object)
-        packages = data.get("packages", {})
+def extract_package_lock_dependencies(data: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+    """
+    Parses package-lock.json (v1, v2, v3) into parent -> {child: version} mapping.
+    Handles both packages (v2/v3) and dependencies (v1) structures.
+    """
+    results: Dict[str, Dict[str, str]] = {}
+    if not isinstance(data, dict):
+        return results
+
+    # Support npm lockfile v2 & v3 (packages object)
+    packages = data.get("packages", {})
+    if isinstance(packages, dict):
         for pkg_path, pkg_info in packages.items():
-            if not pkg_path or pkg_path == "":
+            if not pkg_path or not isinstance(pkg_info, dict):
                 continue
-            clean_name = pkg_path.replace("node_modules/", "").strip()
-            parts = clean_name.split("/")
-            parent_name = parts[-1] if len(parts) == 1 else parts[0]
+            parent_name = extract_clean_pkg_name(pkg_path)
+            if not parent_name:
+                continue
             child_deps = pkg_info.get("dependencies", {})
-            if child_deps and isinstance(child_deps, dict):
+            if isinstance(child_deps, dict) and child_deps:
                 results.setdefault(parent_name, {}).update(child_deps)
 
-        # Support npm lockfile v1 (dependencies object)
-        dependencies = data.get("dependencies", {})
+    # Support npm lockfile v1 (dependencies object)
+    dependencies = data.get("dependencies", {})
+    if isinstance(dependencies, dict):
         for parent_name, parent_info in dependencies.items():
+            if not isinstance(parent_info, dict):
+                continue
             child_deps = parent_info.get("dependencies", {})
             if isinstance(child_deps, dict):
                 for child_name, child_meta in child_deps.items():
                     ver = child_meta.get("version", "*") if isinstance(child_meta, dict) else str(child_meta)
                     results.setdefault(parent_name, {})[child_name] = ver
+
+    return results
+
+def parse_package_lock_json(file_path: str) -> Dict[str, Dict[str, str]]:
+    """
+    Parses package-lock.json from disk to extract true parent-child transitive dependencies.
+    """
+    if not os.path.exists(file_path):
+        return {}
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            data = json.load(f)
+        return extract_package_lock_dependencies(data)
     except Exception as e:
         logger.warning(f"Failed to parse lockfile at {file_path}: {e}")
-    return results
+        return {}
+
+def resolve_multi_tier_transitives(
+    direct_deps: Dict[str, str],
+    lock_data_map: Dict[str, Dict[str, str]]
+) -> Tuple[Dict[str, Dict[str, str]], Dict[str, Dict[str, str]]]:
+    """
+    Resolves multi-tier transitive trees (2-3 layers deep):
+      Tier 2: Transitive dependencies of direct packages
+      Tier 3: Deep transitive dependencies of Tier 2 packages
+    Returns (layer_2_transitives, layer_3_deep_transitives)
+    """
+    layer_2: Dict[str, Dict[str, str]] = {}
+    layer_3: Dict[str, Dict[str, str]] = {}
+
+    # Layer 2: Direct -> Transitive
+    for direct_pkg in direct_deps:
+        # Check lockfile first
+        children = lock_data_map.get(direct_pkg)
+        if not children:
+            clean_p = direct_pkg.lower()
+            children = KNOWN_NODE_TRANSITIVES.get(clean_p) or KNOWN_PYTHON_TRANSITIVES.get(clean_p)
+
+        if children:
+            layer_2[direct_pkg] = dict(children)
+
+    # Layer 3: Transitive -> Deep Transitive (3rd layer)
+    for direct_pkg, sub_dict in layer_2.items():
+        for sub_pkg in sub_dict:
+            if sub_pkg in layer_3:
+                continue
+            deep_children = lock_data_map.get(sub_pkg)
+            if not deep_children:
+                clean_s = sub_pkg.lower()
+                deep_children = KNOWN_NODE_TRANSITIVES.get(clean_s) or KNOWN_PYTHON_TRANSITIVES.get(clean_s)
+
+            if deep_children:
+                layer_3[sub_pkg] = dict(deep_children)
+
+    return layer_2, layer_3
 
 def parse_docker_compose_services(file_path: str) -> List[Dict[str, Any]]:
     """
@@ -361,20 +426,16 @@ def scan_project_directory(folder_path: str) -> Dict[str, Any]:
                 except Exception:
                     continue
 
-    # Enrich known transitive dependencies for top packages
-    for pkg in overall_dependencies:
-        clean_p = pkg.lower()
-        if clean_p in KNOWN_NODE_TRANSITIVES:
-            transitive_dependencies.setdefault(pkg, {}).update(KNOWN_NODE_TRANSITIVES[clean_p])
-        elif clean_p in KNOWN_PYTHON_TRANSITIVES:
-            transitive_dependencies.setdefault(pkg, {}).update(KNOWN_PYTHON_TRANSITIVES[clean_p])
+    # Multi-tier transitive resolution: 2nd layer & 3rd layer deep transitives
+    layer_2_trans, layer_3_deep = resolve_multi_tier_transitives(overall_dependencies, transitive_dependencies)
 
     return {
         "project_name": project_name,
         "folder_path": abs_path,
         "services": services,
         "dependencies": overall_dependencies,
-        "transitive_dependencies": transitive_dependencies,
+        "transitive_dependencies": layer_2_trans,
+        "deep_transitive_dependencies": layer_3_deep,
         "infrastructure_nodes": infrastructure_nodes,
         "observed_hosts": list(observed_hosts),
         "evidence_records": evidence_records,
