@@ -237,3 +237,43 @@ export interface AIStatusResponse {
   message: string;
   display_name?: string;
 }
+
+export interface ChatReference {
+  type: 'finding' | 'node' | 'journey';
+  id: string;
+  label: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+  references?: ChatReference[];
+  isAiGenerated?: boolean;
+  status?: string;
+  isError?: boolean;
+}
+
+export interface AIChatRequestPayload {
+  message: string;
+  conversation_id: string;
+  scan_id?: string;
+  finding_id?: string;
+  graph_node_id?: string;
+  audience: 'builder' | 'enterprise';
+  user_approved_transmission: boolean;
+  history: Array<{ role: string; content: string }>;
+  api_key?: string;
+}
+
+export interface AIChatResponsePayload {
+  conversation_id: string;
+  answer: string;
+  references: ChatReference[];
+  ai_status: string;
+  model_used: string;
+  is_ai_generated: boolean;
+  warnings: string[];
+}
+

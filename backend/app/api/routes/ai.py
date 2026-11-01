@@ -10,7 +10,8 @@ from app.integrations.gemini import (
     explain_finding,
     sanitize_context_for_gemini,
     enrich_vendor_profile,
-    check_gemini_status
+    check_gemini_status,
+    chat_with_gemini
 )
 
 router = APIRouter()
@@ -53,6 +54,35 @@ class PreviewPayloadRequest(BaseModel):
 
 class VendorEnrichRequest(BaseModel):
     vendor_domain: str = "stripe.com"
+
+class ChatHistoryItem(BaseModel):
+    role: str = Field(..., description="'user' or 'assistant'")
+    content: str = Field(..., description="Message content")
+
+class AIChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000, description="User question or follow-up")
+    conversation_id: str = Field(default="session-default", description="Client conversation/session identifier")
+    scan_id: Optional[str] = Field(default=None, description="Current project scan ID")
+    finding_id: Optional[str] = Field(default=None, description="Optional target finding ID")
+    graph_node_id: Optional[str] = Field(default=None, description="Optional target graph component ID")
+    audience: str = Field(default="builder", description="'builder' or 'enterprise'")
+    user_approved_transmission: bool = Field(default=False, description="Explicit consent to transmit sanitized metadata")
+    history: List[ChatHistoryItem] = Field(default_factory=list, description="Recent conversation turns")
+    api_key: Optional[str] = Field(default=None, description="Optional Gemini API key override")
+
+class ReferenceItem(BaseModel):
+    type: str = Field(..., description="'finding' or 'node'")
+    id: str = Field(..., description="Local verified ID")
+    label: str = Field(..., description="Display label")
+
+class AIChatResponse(BaseModel):
+    conversation_id: str
+    answer: str
+    references: List[ReferenceItem] = Field(default_factory=list)
+    ai_status: str
+    model_used: str
+    is_ai_generated: bool
+    warnings: List[str] = Field(default_factory=list)
 
 @router.get("/status")
 async def get_ai_status(refresh: bool = False):
@@ -98,3 +128,35 @@ async def enrich_vendor(request: VendorEnrichRequest):
     Enriches detected external domain with known third-party cloud sub-processors.
     """
     return await enrich_vendor_profile(request.vendor_domain)
+
+@router.post("/chat", response_model=AIChatResponse)
+async def chat_ai(request: AIChatRequest):
+    """
+    Context-aware conversational copilot endpoint (Ask BlindSpot).
+    Requires explicit user consent (user_approved_transmission=True).
+    Reuses existing Gemini 3.6 Flash integration, status taxonomy, and grounding.
+    """
+    if not request.user_approved_transmission:
+        raise HTTPException(
+            status_code=400,
+            detail="User must approve transmission of sanitized project metadata before chatting."
+        )
+
+    try:
+        history_dicts = [h.model_dump() for h in request.history]
+        result = await chat_with_gemini(
+            message=request.message,
+            conversation_id=request.conversation_id,
+            scan_id=request.scan_id,
+            finding_id=request.finding_id,
+            graph_node_id=request.graph_node_id,
+            audience=request.audience,
+            user_approved_transmission=request.user_approved_transmission,
+            history=history_dicts,
+            api_key_override=request.api_key
+        )
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal chat error: {str(e)}")

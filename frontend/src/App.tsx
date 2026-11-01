@@ -4,6 +4,7 @@ import { AppHeaderStrip } from './components/AppHeaderStrip';
 import { AnalysisLoadingOverlay } from './components/AnalysisLoadingOverlay';
 import { KnowledgeStatusBadge } from './components/KnowledgeStatusBadge';
 import { AIExplainModal } from './components/AIExplainModal';
+import { AskBlindSpot } from './components/AskBlindSpot';
 import { GraphExplorer } from './components/GraphExplorer';
 import { NodeInspectorDrawer } from './components/NodeInspectorDrawer';
 import { FailureSimulationPanel } from './components/FailureSimulationPanel';
@@ -572,6 +573,25 @@ export const App: React.FC = () => {
         mode={mode}
         isOpen={selectedFindingForAI !== null}
         onClose={() => setSelectedFindingForAI(null)}
+      />
+
+      {/* Global Ask BlindSpot Copilot */}
+      <AskBlindSpot
+        scanId={scan?.scan_id}
+        projectName={scanProjectName}
+        selectedFinding={selectedFindingForAI}
+        selectedNode={selectedNode}
+        simulation={simulation}
+        mode={mode}
+        findings={findings}
+        onSelectFinding={(f) => setSelectedFindingForAI(f)}
+        onSelectNode={(nodeId) => {
+          const found = graphData?.nodes.find((n) => n.id === nodeId);
+          if (found) {
+            setSelectedNode(found);
+            setActiveTab('graph');
+          }
+        }}
       />
     </div>
   );

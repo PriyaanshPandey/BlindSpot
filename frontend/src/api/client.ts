@@ -6,7 +6,9 @@ import {
   KnowledgeManifest,
   BundleVerificationSummary,
   AIExplanation,
-  AIStatusResponse
+  AIStatusResponse,
+  AIChatRequestPayload,
+  AIChatResponsePayload
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -178,3 +180,17 @@ export async function getAIStatus(refresh: boolean = false): Promise<AIStatusRes
   if (!res.ok) throw new Error(`Fetch AI status failed: HTTP ${res.status}`);
   return res.json();
 }
+
+export async function sendAIChat(payload: AIChatRequestPayload): Promise<AIChatResponsePayload> {
+  const res = await fetch(`${API_BASE}/ai/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.detail || `Chat request failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+

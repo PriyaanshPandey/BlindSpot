@@ -548,3 +548,7 @@ async def enrich_vendor_profile(vendor_domain: str) -> Dict[str, Any]:
         "sources": [f"https://{clean_domain}/privacy"],
         "is_curated": False
     }
+
+# Late import to prevent circular dependency
+from app.integrations.gemini.chat import chat_with_gemini, assemble_chat_context
+
