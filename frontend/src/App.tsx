@@ -10,6 +10,7 @@ import { NodeInspectorDrawer } from './components/NodeInspectorDrawer';
 import { LandingPage } from './components/LandingPage';
 import { ThirdPartyIntelligenceView } from './components/ThirdPartyIntelligenceView';
 import { LiveRadarView } from './components/LiveRadarView';
+import { VendorPassportsView } from './components/VendorPassportsView';
 import {
   ShieldCheck,
   Flame,
@@ -271,99 +272,14 @@ export const App: React.FC = () => {
           )}
           {/* Tab 4: Vendor Passports */}
           {activeTab === 'passports' && (
-            <div className="p-8 max-w-6xl mx-auto space-y-6 overflow-y-auto h-full">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Cryptographic Vendor Resilience Passports</h2>
-                  <p className="text-xs text-slate-400">
-                    Disclosed third-party cloud vendors and infrastructure detected in codebase with cryptographic Ed25519 signatures.
-                  </p>
-                </div>
-                <span className="text-xs font-mono text-purple-400 bg-purple-500/10 px-3 py-1 rounded-xl border border-purple-500/20">
-                  Ed25519 Verified
-                </span>
-              </div>
-
-              {(() => {
-                const detectedVendors = graphData?.nodes.filter(
-                  (n) => n.type === 'vendor' || n.type === 'external_api' || n.type === 'infrastructure_resource'
-                ) || [];
-
-                if (detectedVendors.length === 0) {
-                  return (
-                    <div className="p-12 rounded-3xl bg-black/60 border border-white/10 text-center space-y-2 backdrop-blur-md">
-                      <ShieldCheck className="w-10 h-10 text-emerald-400 mx-auto" />
-                      <h3 className="font-bold text-white">Zero Third-Party Cloud Vendors Detected</h3>
-                      <p className="text-xs text-slate-400">All scanned dependencies and services in this project are self-hosted or direct packages.</p>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {detectedVendors.map((vendor) => {
-                      const isInfra = vendor.type === 'infrastructure_resource';
-                      const upstreamEdges = graphData?.edges.filter((e) => e.source === vendor.id) || [];
-                      const upstreamTargets = upstreamEdges
-                        .map((e) => graphData?.nodes.find((n) => n.id === e.target)?.label)
-                        .filter(Boolean);
-
-                      return (
-                        <div
-                          key={vendor.id}
-                          className="p-5 rounded-2xl bg-[#111928]/90 hover:bg-[#152033] border border-white/[0.08] hover:border-white/20 space-y-3 shadow-lg hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.7)] hover:-translate-y-0.5 transition-all duration-300 ease-out backdrop-blur-md"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {isInfra ? (
-                                <Database className="w-4 h-4 text-emerald-400" />
-                              ) : (
-                                <Globe className="w-4 h-4 text-rose-400" />
-                              )}
-                              <span className="font-bold text-white text-sm">{vendor.label}</span>
-                            </div>
-                            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                              {isInfra ? 'Infrastructure' : 'Cloud Vendor'}
-                            </span>
-                          </div>
-
-                          <p className="text-xs text-slate-400">
-                            {isInfra
-                              ? 'Managed internal datastore or cache supporting primary business operations.'
-                              : 'Third-party cloud service disclosed in environment configurations or source code.'}
-                          </p>
-
-                          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 space-y-1.5 text-xs">
-                            <div className="flex items-center justify-between text-slate-300">
-                              <span className="text-slate-400">Target Node:</span>
-                              <span className="font-mono text-[11px] text-purple-300">{vendor.id}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-slate-300">
-                              <span className="text-slate-400">Upstream Hosts:</span>
-                              <span className="font-mono text-[11px] text-cyan-300">
-                                {upstreamTargets.length > 0 ? upstreamTargets.join(', ') : 'Direct Endpoint'}
-                              </span>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => {
-                              setActiveTab('graph');
-                              setSelectedNode(vendor);
-                              handleSimulateOutage(vendor.id, 4);
-                            }}
-                            className="w-full py-2 px-3 rounded-xl bg-white/[0.04] hover:bg-white/10 hover:border-white/20 border border-white/10 text-slate-200 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all duration-200 ease-out hover:scale-[1.01] active:scale-95 cursor-pointer shadow-sm"
-                          >
-                            <Flame className="w-3.5 h-3.5 text-rose-400" />
-                            <span>Simulate Outage & Trace Blast Radius</span>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
+            <VendorPassportsView
+              graphData={graphData}
+              onSimulateOutage={handleSimulateOutage}
+              onSelectNode={(node) => {
+                setSelectedNode(node);
+                setActiveTab('graph');
+              }}
+            />
           )}
           {/* Tab 5: Third-Party Intelligence */}
           {activeTab === 'third-party' && (
