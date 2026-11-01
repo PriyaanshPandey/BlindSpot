@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 
 interface AppSidebarProps {
-  activeTab: 'graph' | 'findings' | 'simulation' | 'passports' | 'third-party';
-  setActiveTab: (tab: 'graph' | 'findings' | 'simulation' | 'passports' | 'third-party') => void;
+  activeTab: 'graph' | 'findings' | 'passports' | 'third-party';
+  setActiveTab: (tab: 'graph' | 'findings' | 'passports' | 'third-party') => void;
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
   graphNodeCount?: number;
@@ -44,12 +44,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       label: 'Live Radar',
       shortLabel: 'Radar',
       icon: Radar
-    },
-    {
-      id: 'simulation' as const,
-      label: 'Failure Simulator',
-      shortLabel: 'Simulator',
-      icon: Flame
     },
     {
       id: 'third-party' as const,

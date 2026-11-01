@@ -7,7 +7,6 @@ import { AIExplainModal } from './components/AIExplainModal';
 import { AskBlindSpot } from './components/AskBlindSpot';
 import { GraphExplorer } from './components/GraphExplorer';
 import { NodeInspectorDrawer } from './components/NodeInspectorDrawer';
-import { FailureSimulationPanel } from './components/FailureSimulationPanel';
 import { LandingPage } from './components/LandingPage';
 import { ThirdPartyIntelligenceView } from './components/ThirdPartyIntelligenceView';
 import { LiveRadarView } from './components/LiveRadarView';
@@ -43,7 +42,7 @@ export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard'>('landing');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [mode, setMode] = useState<'builder' | 'enterprise'>('enterprise');
-  const [activeTab, setActiveTab] = useState<'graph' | 'findings' | 'simulation' | 'passports' | 'third-party'>('graph');
+  const [activeTab, setActiveTab] = useState<'graph' | 'findings' | 'passports' | 'third-party'>('graph');
   const [targetPath, setTargetPath] = useState<string>('./demo/nexus-commerce');
   const [isScanning, setIsScanning] = useState(false);
   const [scanProjectName, setScanProjectName] = useState<string>('Nexus Commerce');
@@ -158,7 +157,11 @@ export const App: React.FC = () => {
       const scanId = scan?.scan_id || 'default-scan';
       const simRes = await simulateFailure(scanId, targetNodeId, hours);
       setSimulation(simRes);
-      setActiveTab('simulation');
+      const targetNode = graphData?.nodes.find((n) => n.id === targetNodeId);
+      if (targetNode) {
+        setSelectedNode(targetNode);
+      }
+      setActiveTab('graph');
     } catch (err) {
       console.error('Simulation error:', err);
     }
@@ -241,8 +244,11 @@ export const App: React.FC = () => {
                 node={selectedNode}
                 onClose={() => setSelectedNode(null)}
                 onSimulateNodeOutage={handleSimulateOutage}
+                onClearSimulation={() => setSimulation(null)}
+                simulation={simulation}
                 onExplainAI={setSelectedFindingForAI}
                 associatedFindings={findings.filter((f) => f.target_node_id === selectedNode?.id)}
+                graphData={graphData}
               />
             </div>
           )}
@@ -263,57 +269,6 @@ export const App: React.FC = () => {
               onExplainAI={(finding) => setSelectedFindingForAI(finding)}
             />
           )}
-          {/* Tab 3: Failure Simulator */}
-          {activeTab === 'simulation' && (
-            <div className="p-8 max-w-6xl mx-auto space-y-6 overflow-y-auto h-full">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Failure Simulation & Business Impact</h2>
-                  <p className="text-xs text-slate-400">
-                    Simulate outage of any component and quantify cascading architecture and journey impact severity.
-                  </p>
-                </div>
-              </div>
-
-              {simulation ? (
-                <FailureSimulationPanel
-                  simulation={simulation}
-                  durationHours={durationHours}
-                  onDurationChange={handleDurationChange}
-                  onResetSimulation={() => setSimulation(null)}
-                />
-              ) : (
-                <div className="p-12 rounded-3xl bg-black/60 border border-white/10 text-center space-y-4 backdrop-blur-md">
-                  <Flame className="w-12 h-12 text-rose-500 mx-auto" />
-                  <h3 className="font-bold text-lg text-white">No Failure Simulation Currently Active</h3>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Select any component from the list below or click any node directly on the Dependency Graph.
-                  </p>
-
-                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                    {graphData?.nodes
-                      .filter(
-                        (n) =>
-                          n.type === 'vendor' ||
-                          n.type === 'internal_service' ||
-                          n.type === 'external_api'
-                      )
-                      .map((node) => (
-                        <button
-                          key={node.id}
-                          onClick={() => handleSimulateOutage(node.id, 4)}
-                          className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/10 text-white text-xs font-semibold border border-white/10 transition-all flex items-center gap-2 cursor-pointer"
-                        >
-                          <Flame className="w-3.5 h-3.5 text-rose-400" />
-                          <span>Simulate Outage: {node.label}</span>
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Tab 4: Vendor Passports */}
           {activeTab === 'passports' && (
             <div className="p-8 max-w-6xl mx-auto space-y-6 overflow-y-auto h-full">
