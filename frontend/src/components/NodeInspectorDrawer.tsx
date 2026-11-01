@@ -137,7 +137,7 @@ export const NodeInspectorDrawer: React.FC<NodeInspectorDrawerProps> = ({
             <span>Simulate Node Failure</span>
           </button>
           <p className="text-[10px] text-slate-500 text-center mt-2">
-            Computes upstream blast radius and business journey financial exposure.
+            Computes upstream blast radius and cascading system failure impact percentage.
           </p>
         </div>
       </div>

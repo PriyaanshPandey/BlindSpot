@@ -186,6 +186,8 @@ export const App: React.FC = () => {
           setFilterLayer={setFilterLayer}
           activeTab={activeTab}
           isScanning={isScanning}
+          mode={mode}
+          setMode={setMode}
         />
 
         {/* Content View Canvas */}
@@ -215,6 +217,31 @@ export const App: React.FC = () => {
           {/* Tab 2: Findings & Discrepancies */}
           {activeTab === 'findings' && (
             <div className="p-8 max-w-6xl mx-auto space-y-6 overflow-y-auto h-full">
+              {/* Mode Banner Indicator */}
+              <div className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition-all ${
+                mode === 'builder'
+                  ? 'bg-blue-950/30 border-blue-500/30 text-blue-200'
+                  : 'bg-purple-950/30 border-purple-500/30 text-purple-200'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                    mode === 'builder'
+                      ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                      : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                  }`}>
+                    {mode === 'builder' ? 'Builder Mode Active' : 'Enterprise Mode Active'}
+                  </span>
+                  <span className="text-slate-300 text-[11px]">
+                    {mode === 'builder'
+                      ? 'Displaying developer fix commands, exact manifest paths, and package-level remediation.'
+                      : 'Displaying SRE business continuity impact, journey resilience %, and architecture drift.'}
+                  </span>
+                </div>
+                <div className="text-[11px] font-mono text-slate-400 hidden sm:block">
+                  Perspective: <strong className="text-white uppercase">{mode}</strong>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold text-white">Discrepancies & Vulnerabilities</h2>
@@ -272,6 +299,38 @@ export const App: React.FC = () => {
                         </div>
                       )}
 
+                      {/* Builder Mode: Quick Terminal Fix Snippet */}
+                      {mode === 'builder' && (
+                        <div className="p-2.5 rounded-xl bg-blue-950/25 border border-blue-500/25 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2 overflow-x-auto">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase">
+                              Terminal Fix
+                            </span>
+                            <code className="text-blue-200 font-mono text-[11px]">
+                              {finding.target_node_id.startsWith('pkg:')
+                                ? `npm update ${finding.target_node_id.replace('pkg:trans:', '').replace('pkg:', '')}@latest`
+                                : `git grep -n "${finding.target_node_id.replace('ext:', '')}"`}
+                            </code>
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-mono shrink-0">Developer Fast-Patch</span>
+                        </div>
+                      )}
+
+                      {/* Enterprise Mode: Business Operation & Risk Scope */}
+                      {mode === 'enterprise' && (
+                        <div className="p-2.5 rounded-xl bg-purple-950/25 border border-purple-500/25 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase">
+                              Business Scope
+                            </span>
+                            <span className="text-slate-300 text-[11px]">
+                              Impacted Operation: <strong className="text-purple-200">{finding.affected_journey_ids?.join(', ') || 'Core Flow'}</strong>
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-purple-400 font-mono shrink-0">SRE / CISO Tier 1</span>
+                        </div>
+                      )}
+
                       {/* Gemini AI Explain Action Button */}
                       <div className="pt-1 flex items-center justify-between">
                         <button
@@ -301,7 +360,7 @@ export const App: React.FC = () => {
                 <div>
                   <h2 className="text-xl font-bold text-white">Failure Simulation & Business Impact</h2>
                   <p className="text-xs text-slate-400">
-                    Simulate outage of any component and quantify cascading revenue and journey exposure.
+                    Simulate outage of any component and quantify cascading architecture and journey impact severity.
                   </p>
                 </div>
               </div>

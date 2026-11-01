@@ -114,8 +114,15 @@ def calculate_financial_exposure(
         }
     ]
 
+    max_disruption = max([j["disruption_fraction"] for j in impacted_journeys], default=0.7)
+    blast_weight = min(len(impacted_nodes) * 5, 25)
+    duration_weight = min(failure_duration_hours * 0.85, 20)
+    system_impact_pct = min(99.0, max(28.0, round(max_disruption * 55.0 + blast_weight + duration_weight, 1)))
+
     return {
         "total_estimated_gross_exposure": round(total_exposure, 2),
+        "system_impact_percentage": system_impact_pct,
+        "severity_rating": "CRITICAL" if system_impact_pct >= 80 else ("HIGH" if system_impact_pct >= 60 else "MODERATE"),
         "exposure_currency": "USD",
         "impacted_journeys": impacted_journeys,
         "mitigation_strategies": mitigation_strategies
