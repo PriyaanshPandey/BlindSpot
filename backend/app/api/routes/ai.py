@@ -6,7 +6,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
-from app.integrations.gemini import explain_finding, sanitize_context_for_gemini, enrich_vendor_profile
+from app.integrations.gemini import (
+    explain_finding,
+    sanitize_context_for_gemini,
+    enrich_vendor_profile,
+    check_gemini_status
+)
 
 router = APIRouter()
 
@@ -19,7 +24,7 @@ class ExplainFindingRequest(BaseModel):
     cve_id: Optional[str] = None
     severity: str = "medium"
     journey_name: Optional[str] = "Customer Checkout"
-    audience: str = Field(default="developer", description="Technical explanation for engineers")
+    audience: str = Field(default="developer", description="Technical explanation for engineers (builder or enterprise)")
     user_approved_transmission: bool = Field(default=True, description="Must be explicitly acknowledged by user")
     api_key: Optional[str] = Field(default=None, description="Optional user-provided Gemini API key")
 
@@ -36,6 +41,13 @@ class PreviewPayloadRequest(BaseModel):
 
 class VendorEnrichRequest(BaseModel):
     vendor_domain: str = "stripe.com"
+
+@router.get("/status")
+async def get_ai_status():
+    """
+    Returns the current readiness and configuration status of the Gemini AI integration.
+    """
+    return check_gemini_status()
 
 @router.post("/preview-payload")
 async def preview_ai_payload(request: PreviewPayloadRequest):
@@ -55,6 +67,7 @@ async def preview_ai_payload(request: PreviewPayloadRequest):
 async def explain_vulnerability(request: ExplainFindingRequest):
     """
     Generates structured AI explanation for a vulnerability finding.
+    Enforces user approval and returns structured explanation or explicit error status.
     """
     if not request.user_approved_transmission:
         raise HTTPException(

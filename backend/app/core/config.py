@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # Integrations
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     SOLANA_RPC_URL: str = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
 
     class Config:
@@ -40,4 +41,3 @@ class Settings(BaseSettings):
         extra = "allow"
 
 settings = Settings()
-

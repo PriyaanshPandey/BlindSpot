@@ -5,7 +5,8 @@ import {
   ScanSummary,
   KnowledgeManifest,
   BundleVerificationSummary,
-  AIExplanation
+  AIExplanation,
+  AIStatusResponse
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -151,5 +152,12 @@ export async function verifyKnowledgeBundle(simulateTamper: boolean = false): Pr
     body: JSON.stringify({ simulate_tamper: simulateTamper })
   });
   if (!res.ok) throw new Error(`Bundle verification failed: ${res.statusText}`);
+  return res.json();
+}
+
+
+export async function getAIStatus(): Promise<AIStatusResponse> {
+  const res = await fetch(`/ai/status`);
+  if (!res.ok) throw new Error(`Fetch AI status failed: `);
   return res.json();
 }
