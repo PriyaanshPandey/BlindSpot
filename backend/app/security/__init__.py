@@ -12,13 +12,13 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any
 
-logger = logging.getLogger("hdx.security")
+logger = logging.getLogger("blindspot.security")
 
 OSV_QUERY_URL = "https://api.osv.dev/v1/query"
 
 def is_offline_mode() -> bool:
     """Checks if offline mode is explicitly requested or network is unavailable."""
-    return os.getenv("HDX_OFFLINE_MODE", "false").lower() in ("true", "1", "yes")
+    return os.getenv("BLINDSPOT_OFFLINE_MODE", "false").lower() in ("true", "1", "yes")
 
 # Offline local fallback cache if network is temporarily unavailable
 OFFLINE_KNOWN_PACKAGES = {

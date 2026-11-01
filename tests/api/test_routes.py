@@ -27,7 +27,7 @@ def test_health_endpoint():
     assert "operating_mode" in res
 
 def test_full_scan_graph_simulation_lifecycle():
-    demo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "demo", "nexus-commerce"))
+    demo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "test-projects", "nexus-commerce"))
     trace_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "fixtures", "runtime", "traces.sample.json"))
 
     # 1. Trigger scan

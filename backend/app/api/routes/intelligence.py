@@ -27,7 +27,7 @@ async def get_third_party_summary(scan_id: str):
 
     repo_path = scan.get("config", {}).get("repo_path") if scan.get("config") else None
     if not repo_path or not os.path.exists(repo_path):
-        repo_path = "./demo/nexus-commerce"
+        repo_path = "./test-projects/nexus-commerce"
 
     if scan_id not in _SCAN_INTELLIGENCE_CACHE:
         # Run intelligence analysis

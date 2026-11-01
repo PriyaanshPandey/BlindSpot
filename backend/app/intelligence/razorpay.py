@@ -23,7 +23,7 @@ from app.intelligence.models import (
 )
 from app.intelligence.rules import redact_sensitive_text
 
-logger = logging.getLogger("hdx.intelligence.razorpay")
+logger = logging.getLogger("blindspot.intelligence.razorpay")
 
 class RazorpaySecurityProfile:
     VENDOR_ID = "razorpay"

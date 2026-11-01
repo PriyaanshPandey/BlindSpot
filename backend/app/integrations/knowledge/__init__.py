@@ -12,13 +12,13 @@ from typing import Dict, Any, Optional
 from app.integrations.signing import sign_bundle, verify_bundle, compute_bundle_hash
 from app.integrations.solana import verify_bundle_on_solana
 
-logger = logging.getLogger("hdx.knowledge")
+logger = logging.getLogger("blindspot.knowledge")
 
 DEFAULT_BUNDLE_DATA = {
     "bundle_id": "bundle-2026-10-31-001",
     "version": "1.0.0",
     "published_at": "2026-10-31T12:00:00Z",
-    "publisher": "HDX Public Knowledge Authority (DigitalOcean)",
+    "publisher": "Blindspot Public Knowledge Authority (DigitalOcean)",
     "advisories_count": 284,
     "vendor_passports": [
         {
@@ -71,7 +71,7 @@ async def fetch_remote_manifest(manifest_url: Optional[str] = None) -> Dict[str,
     Fetches the public knowledge manifest from DigitalOcean App Platform / Spaces.
     Only uses outbound GET. No customer code or internal data is ever transmitted.
     """
-    url = manifest_url or os.getenv("KNOWLEDGE_PLANE_API_URL", "https://knowledge.hdx-defense.io/v1") + "/manifest"
+    url = manifest_url or os.getenv("KNOWLEDGE_PLANE_API_URL", "https://knowledge.blindspot-defense.io/v1") + "/manifest"
     try:
         async with httpx.AsyncClient(timeout=4.0) as client:
             resp = await client.get(url)
@@ -88,7 +88,7 @@ async def fetch_remote_manifest(manifest_url: Optional[str] = None) -> Dict[str,
         "signing_key_id": SIGNED_DEFAULT_BUNDLE["signing_key_id"],
         "published_at": SIGNED_DEFAULT_BUNDLE["published_at"],
         "distribution_channel": "DigitalOcean Spaces / CDN",
-        "operating_mode": os.getenv("HDX_OPERATING_MODE", "hybrid"),
+        "operating_mode": os.getenv("BLINDSPOT_OPERATING_MODE", "hybrid"),
         "privacy_isolation": "Verified: Zero Customer Telemetry Exfiltration"
     }
 

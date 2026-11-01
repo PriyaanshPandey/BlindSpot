@@ -42,7 +42,7 @@ export const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [mode, setMode] = useState<'builder' | 'enterprise'>('enterprise');
   const [activeTab, setActiveTab] = useState<'graph' | 'findings' | 'simulation' | 'passports' | 'third-party'>('graph');
-  const [targetPath, setTargetPath] = useState<string>('./demo/nexus-commerce');
+  const [targetPath, setTargetPath] = useState<string>('./test-projects/nexus-commerce');
   const [isScanning, setIsScanning] = useState(false);
   const [scanProjectName, setScanProjectName] = useState<string>('Nexus Commerce');
   const [scan, setScan] = useState<ScanSummary | null>(null);
@@ -57,7 +57,7 @@ export const App: React.FC = () => {
 
   // Initial pre-load of sample demo in background
   useEffect(() => {
-    handleRunScan('./demo/nexus-commerce', false);
+    handleRunScan('./test-projects/nexus-commerce', false);
   }, []);
 
   const handleRunScan = async (pathOverride?: string, shouldSwitchView: boolean = true) => {

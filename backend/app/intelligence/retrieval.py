@@ -18,7 +18,7 @@ import httpx
 
 from app.intelligence.models import PackageInstance, RetrievalStatus
 
-logger = logging.getLogger("hdx.intelligence.retrieval")
+logger = logging.getLogger("blindspot.intelligence.retrieval")
 
 # Safety Bounds
 MAX_TARBALL_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB

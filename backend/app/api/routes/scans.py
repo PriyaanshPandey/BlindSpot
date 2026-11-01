@@ -725,7 +725,7 @@ async def scan_direct_files(payload: DirectPayloadScan):
     evidence_map = {}
     URL_REGEX = re.compile(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s"\'<>)]*)?')
 
-    temp_dir = tempfile.mkdtemp(prefix="hdx_scan_")
+    temp_dir = tempfile.mkdtemp(prefix="blindspot_scan_")
     try:
         for fname, content in payload.files.items():
             safe_fname = fname.replace("..", "").lstrip("/\\")

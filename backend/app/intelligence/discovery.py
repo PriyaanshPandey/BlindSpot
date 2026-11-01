@@ -14,7 +14,7 @@ from app.intelligence.models import (
     RetrievalStatus
 )
 
-logger = logging.getLogger("hdx.intelligence.discovery")
+logger = logging.getLogger("blindspot.intelligence.discovery")
 
 class EcosystemAdapter:
     def discover(self, project_path: str) -> List[PackageInstance]:

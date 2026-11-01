@@ -10,7 +10,7 @@ from app.graph import GraphEngine
 from app.analysis import calculate_financial_exposure, DEFAULT_JOURNEY_METRICS
 from app.models import SimulationRequest, ScenarioModel, SimulationParameters, SimulationImpactResults
 
-logger = logging.getLogger("hdx.simulation")
+logger = logging.getLogger("blindspot.simulation")
 
 class SimulationEngine:
     def __init__(self, graph_engine: GraphEngine):

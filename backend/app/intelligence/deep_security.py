@@ -34,7 +34,7 @@ from app.intelligence.models import (
 )
 from app.intelligence.rules import redact_sensitive_text
 
-logger = logging.getLogger("hdx.intelligence.security_engine")
+logger = logging.getLogger("blindspot.intelligence.security_engine")
 
 class DeepSecurityAnalyzer:
     def scan_codebase(self, project_path: str, observed_hosts: Optional[List[str]] = None) -> List[IntegrationFinding]:

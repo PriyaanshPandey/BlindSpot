@@ -3,9 +3,59 @@ from typing import Optional, Dict, Any, List
 from app.db import db
 from datetime import datetime
 
-logger = logging.getLogger("hdx.db.repo")
+logger = logging.getLogger("blindspot.db.repo")
+
+class VendorCertificateRepository:
+    @staticmethod
+    async def save_certificate(vendor_key: str, pem: str) -> Dict[str, Any]:
+        # In-memory storage
+        db.in_memory_vendor_certs[vendor_key] = {
+            "pem": pem,
+            "valid": None,  # to be set after verification
+            "created_at": datetime.utcnow().isoformat()
+        }
+        # Persist to MongoDB if available
+        if db.is_connected and db.motor_db is not None:
+            try:
+                await db.motor_db.vendor_certs.replace_one(
+                    {"vendor_key": vendor_key},
+                    {"vendor_key": vendor_key, "pem": pem, "valid": None, "created_at": datetime.utcnow()},
+                    upsert=True
+                )
+            except Exception as e:
+                logger.error(f"Error persisting vendor certificate {vendor_key}: {e}")
+        return db.in_memory_vendor_certs[vendor_key]
+
+    @staticmethod
+    async def get_certificate(vendor_key: str) -> Optional[Dict[str, Any]]:
+        if db.is_connected and db.motor_db is not None:
+            try:
+                rec = await db.motor_db.vendor_certs.find_one({"vendor_key": vendor_key})
+                if rec:
+                    return rec
+            except Exception as e:
+                logger.error(f"Error fetching vendor certificate {vendor_key}: {e}")
+        return db.in_memory_vendor_certs.get(vendor_key)
+
+    @staticmethod
+    async def verify_certificate(vendor_key: str) -> bool:
+        # Simple verification placeholder: ensure PEM looks like a certificate
+        cert = await VendorCertificateRepository.get_certificate(vendor_key)
+        if not cert:
+            return False
+        pem = cert.get("pem", "")
+        is_valid = pem.strip().startswith("-----BEGIN CERTIFICATE-----") and pem.strip().endswith("-----END CERTIFICATE-----")
+        cert["valid"] = is_valid
+        # Update persistence
+        if db.is_connected and db.motor_db is not None:
+            try:
+                await db.motor_db.vendor_certs.update_one({"vendor_key": vendor_key}, {"$set": {"valid": is_valid}})
+            except Exception as e:
+                logger.error(f"Error updating cert validity for {vendor_key}: {e}")
+        return is_valid
 
 class ScanRepository:
+
     @staticmethod
     async def save_scan(scan_data: Dict[str, Any]) -> Dict[str, Any]:
         scan_id = scan_data["scan_id"]

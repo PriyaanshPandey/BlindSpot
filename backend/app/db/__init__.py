@@ -7,7 +7,7 @@ except ImportError:
     class OperationFailure(Exception):
         pass
 
-logger = logging.getLogger("hdx.db")
+logger = logging.getLogger("blindspot.db")
 
 class DatabaseClient:
     def __init__(self):
@@ -17,6 +17,8 @@ class DatabaseClient:
         self.in_memory_findings: Dict[str, List[Dict[str, Any]]] = {}
         self.in_memory_scenarios: Dict[str, List[Dict[str, Any]]] = {}
         self.in_memory_evidence: Dict[str, List[Dict[str, Any]]] = {}
+        self.in_memory_vendor_certs: Dict[str, Dict[str, Any]] = {}
+        # Structure: {vendor_key: {"pem": str, "valid": bool, "created_at": str}}
 
         # Async Motor MongoDB connection
         self.client = None
@@ -45,7 +47,7 @@ class DatabaseClient:
             self.motor_db = self.client[target_db]
             self.is_connected = True
             self.storage_mode = "mongodb"
-            logger.info(f"HDX Database successfully connected to MongoDB at {target_uri} [Database: '{target_db}']")
+            logger.info(f"Blindspot Database successfully connected to MongoDB at {target_uri} [Database: '{target_db}']")
         except Exception as exc:
             self.is_connected = False
             self.storage_mode = "in_memory"

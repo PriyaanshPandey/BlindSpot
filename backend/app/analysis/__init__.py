@@ -7,7 +7,7 @@ Gross Exposure = sum(Hourly_Tx * Avg_Tx_Value * Duration * Disruption_Fraction)
 from typing import Dict, Any, List, Optional
 import logging
 
-logger = logging.getLogger("hdx.analysis")
+logger = logging.getLogger("blindspot.analysis")
 
 # Baseline business journey operational parameters
 DEFAULT_JOURNEY_METRICS = {

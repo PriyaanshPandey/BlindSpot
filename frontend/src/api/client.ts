@@ -11,7 +11,7 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
-export async function createScan(repoPath: string = './demo/nexus-commerce'): Promise<ScanSummary> {
+export async function createScan(repoPath: string = './test-projects/nexus-commerce'): Promise<ScanSummary> {
   const res = await fetch(`${API_BASE}/scans`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

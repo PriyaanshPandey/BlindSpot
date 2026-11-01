@@ -18,7 +18,7 @@ from google.genai.errors import APIError, ClientError, ServerError
 
 from app.core.config import settings
 
-logger = logging.getLogger("hdx.gemini")
+logger = logging.getLogger("blindspot.gemini")
 
 # Automatically load .env from multiple potential locations
 root_dir = Path(__file__).resolve().parent.parent.parent.parent

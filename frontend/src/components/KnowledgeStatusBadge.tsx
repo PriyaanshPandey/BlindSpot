@@ -72,7 +72,7 @@ export const KnowledgeStatusBadge: React.FC<KnowledgeStatusBadgeProps> = ({ isOp
               <div>
                 <h4 className="text-sm font-semibold text-emerald-300">Knowledge Bundle Authenticity Confirmed</h4>
                 <p className="text-xs text-emerald-400/80 mt-1">
-                  Bundle was cryptographically signed by the HDX Authority using Ed25519 and independently anchored to the Solana Devnet blockchain.
+                  Bundle was cryptographically signed by the Blindspot Authority using Ed25519 and independently anchored to the Solana Devnet blockchain.
                 </p>
               </div>
             </div>

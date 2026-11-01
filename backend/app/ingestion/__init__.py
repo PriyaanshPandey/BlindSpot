@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Dict, Any, List, Set, Tuple
 
-logger = logging.getLogger("hdx.ingestion")
+logger = logging.getLogger("blindspot.ingestion")
 
 URL_REGEX = re.compile(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s"\'<>)]*)?')
 IMPORT_REGEX = re.compile(r"(?:import\s+.*?from\s+['\"]([^'\"./][^'\"]*)['\"]|require\(['\"]([^'\"./][^'\"]*)['\"]\))")
@@ -35,6 +35,7 @@ def is_noise_domain(host: str) -> bool:
     return any(h == d or h.endswith("." + d) for d in NOISE_DOMAINS)
 
 KNOWN_CLOUD_VENDORS = {
+    "solana": {"vendor": "Solana Blockchain", "host": "api.mainnet-beta.solana.com", "category": "blockchain", "upstream": []},
     "firebase": {"vendor": "Firebase (Google Cloud)", "host": "firebase.google.com", "category": "backend_platform", "upstream": ["google-cloud-us-central1"]},
     "razorpay": {"vendor": "Razorpay Payments", "host": "api.razorpay.com", "category": "payment_gateway", "upstream": ["aws-ap-south-1", "cloudflare-edge"]},
     "stripe": {"vendor": "Stripe Payments", "host": "api.stripe.com", "category": "payment_gateway", "upstream": ["aws-us-east-1", "cloudflare-edge"]},

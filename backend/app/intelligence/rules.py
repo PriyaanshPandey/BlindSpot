@@ -9,7 +9,7 @@ import re
 import logging
 from typing import List, Dict, Any, Optional
 
-logger = logging.getLogger("hdx.intelligence.rules")
+logger = logging.getLogger("blindspot.intelligence.rules")
 
 SECRET_REDACT_REGEX = re.compile(
     r'(?i)(rzp_live_[a-zA-Z0-9]{14,24}|sk_live_[a-zA-Z0-9]{20,32}|[a-zA-Z0-9+/]{30,}={0,2})'

@@ -22,7 +22,7 @@ export const ProjectScannerBar: React.FC<ProjectScannerBarProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const presets = [
-    { label: 'Nexus Commerce (Demo)', path: './demo/nexus-commerce' },
+    { label: 'Nexus Commerce (Sample)', path: './test-projects/nexus-commerce' },
     { label: 'CAREER PILOT (Desktop App)', path: 'C:/Users/Priyansh Pandey/OneDrive/Desktop/CAREER PILOT' },
     { label: 'SampleShop (Test App)', path: 'C:/Users/Priyansh Pandey/OneDrive/Desktop/SampleShop' }
   ];

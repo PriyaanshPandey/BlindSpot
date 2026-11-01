@@ -8,15 +8,15 @@ from app.db import db
 from app.api.router import api_router
 
 logging.basicConfig(level=settings.LOG_LEVEL.upper())
-logger = logging.getLogger("hdx")
+logger = logging.getLogger("blindspot")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Initializing Hidden Dependency X-Ray (HDX) Backend...")
+    logger.info("Initializing Blindspot Dependency Intelligence Backend...")
     await db.connect()
     yield
     await db.close()
-    logger.info("Hidden Dependency X-Ray Backend shutdown cleanly.")
+    logger.info("Blindspot Backend shutdown cleanly.")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -39,7 +39,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": settings.VERSION,
-        "operating_mode": settings.HDX_OPERATING_MODE,
+        "operating_mode": settings.BLINDSPOT_OPERATING_MODE,
         "storage_mode": db.storage_mode,
         "database": db.db_name if db.is_connected else None
     }

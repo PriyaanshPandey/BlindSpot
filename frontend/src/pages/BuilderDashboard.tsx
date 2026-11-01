@@ -60,7 +60,7 @@ export const BuilderDashboard: React.FC<BuilderDashboardProps> = ({
           <div>
             <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">Target Project</span>
             <div className="text-base font-bold text-white mt-1 truncate">Nexus Commerce</div>
-            <span className="text-[11px] font-mono text-slate-500 block">./demo/nexus-commerce</span>
+            <span className="text-[11px] font-mono text-slate-500 block">./test-projects/nexus-commerce</span>
           </div>
           <button
             onClick={onTriggerScan}

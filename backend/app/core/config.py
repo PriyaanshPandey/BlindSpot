@@ -6,7 +6,7 @@ except ImportError:
 from typing import List
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Hidden Dependency X-Ray"
+    PROJECT_NAME: str = "Blindspot"
     VERSION: str = "1.0.0"
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME") or os.getenv("MONGODB_DATABASE") or "blindspot"
 
     # Operating Mode
-    HDX_OPERATING_MODE: str = os.getenv("HDX_OPERATING_MODE", "hybrid")
-    KNOWLEDGE_PLANE_API_URL: str = os.getenv("KNOWLEDGE_PLANE_API_URL", "https://knowledge.hdx-defense.io/v1")
+    BLINDSPOT_OPERATING_MODE: str = os.getenv("BLINDSPOT_OPERATING_MODE", "hybrid")
+    KNOWLEDGE_PLANE_API_URL: str = os.getenv("KNOWLEDGE_PLANE_API_URL", "https://knowledge.blindspot-defense.io/v1")
     KNOWLEDGE_BUNDLE_PUBLIC_KEY: str = os.getenv("KNOWLEDGE_BUNDLE_PUBLIC_KEY", "")
 
     # Integrations

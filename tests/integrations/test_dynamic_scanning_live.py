@@ -116,7 +116,7 @@ def test_scan_ecommerce_monorepo_multiservice():
 
 def test_scan_nexus_commerce_transitive_hierarchy():
     """Verify lockfile and docker-compose parsing generates true multi-tier hierarchy."""
-    target = os.path.join(WORKSPACE_ROOT, "demo", "nexus-commerce")
+    target = os.path.join(WORKSPACE_ROOT, "test-projects", "nexus-commerce")
     assert os.path.exists(target), f"Target {target} must exist"
 
     scan_data = scan_project_directory(target)

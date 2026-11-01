@@ -68,7 +68,7 @@ async def test_live_mongodb_connection_and_persistence():
         assert not evidence_global_id, f"Evidence has prohibited global unique index on id. Found: {evidence_indexes}"
 
         # 3. Trigger first scan on demo project
-        demo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "demo", "nexus-commerce"))
+        demo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "test-projects", "nexus-commerce"))
         trace_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fixtures", "runtime", "traces.sample.json"))
 
         scan_req = ScanRequest(

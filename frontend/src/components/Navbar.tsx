@@ -25,7 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isFolderOpen, setIsFolderOpen] = useState(false);
 
   const presets = [
-    { label: 'Nexus Commerce (Demo App)', path: './demo/nexus-commerce' },
+    { label: 'Nexus Commerce (Sample)', path: './test-projects/nexus-commerce' },
     { label: 'CAREER PILOT (Desktop App)', path: 'C:/Users/Priyansh Pandey/OneDrive/Desktop/CAREER PILOT' },
     { label: 'SampleShop (Desktop Test Website)', path: 'C:/Users/Priyansh Pandey/OneDrive/Desktop/SampleShop' }
   ];
@@ -47,7 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               BlindSpot
             </span>
             <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
-              HDX
+              Blindspot
             </span>
             {onGoToLanding && (
               <span className="text-[10px] text-slate-400 border border-slate-700/60 rounded px-1.5 py-0.5 hover:bg-slate-800">

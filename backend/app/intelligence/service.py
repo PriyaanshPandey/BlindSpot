@@ -26,7 +26,7 @@ from app.intelligence.vendor_profiles import (
     AWSSecurityProfile
 )
 
-logger = logging.getLogger("hdx.intelligence.service")
+logger = logging.getLogger("blindspot.intelligence.service")
 
 class ThirdPartyIntelligenceService:
     def __init__(self, cache_dir: Optional[str] = None):

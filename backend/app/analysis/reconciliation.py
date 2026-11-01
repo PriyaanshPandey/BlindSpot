@@ -8,7 +8,7 @@ import uuid
 import logging
 from app.models import FindingModel, FindingType, FindingSeverity, SecurityDetails, Remediation
 
-logger = logging.getLogger("hdx.reconciliation")
+logger = logging.getLogger("blindspot.reconciliation")
 
 class DiscrepancyDetector:
     def __init__(self, scan_id: str):

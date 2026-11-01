@@ -104,7 +104,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   BLINDSPOT
                 </span>
                 <span className="text-[10px] text-rose-400 font-semibold tracking-wider uppercase block -mt-1">
-                  HDX ENGINE
+                  CORE ENGINE
                 </span>
               </div>
             </div>

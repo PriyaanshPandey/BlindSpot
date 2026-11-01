@@ -230,7 +230,7 @@ class ScanStatus(str, Enum):
     FAILED = "failed"
 
 class ScanConfig(BaseModel):
-    repo_path: str = "./demo/nexus-commerce"
+    repo_path: str = "./test-projects/nexus-commerce"
     trace_file_path: Optional[str] = "./fixtures/runtime/traces.sample.json"
     enable_playwright_crawler: bool = False
     enable_vendor_passports: bool = True
@@ -255,6 +255,6 @@ class ScanRecord(BaseModel):
     error_message: Optional[str] = None
 
 class ScanRequest(BaseModel):
-    repo_path: str = "./demo/nexus-commerce"
+    repo_path: str = "./test-projects/nexus-commerce"
     trace_file_path: Optional[str] = "./fixtures/runtime/traces.sample.json"
     enable_vendor_passports: bool = True
