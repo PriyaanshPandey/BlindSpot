@@ -1,35 +1,42 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import uuid
 import os
 import re
 import json
+import zipfile
 import tempfile
 import shutil
 from datetime import datetime
 from app.models import ScanRequest
 from app.db import db
 from app.db.repositories import ScanRepository, GraphRepository, FindingRepository, EvidenceRepository
-from app.ingestion import scan_project_directory, KNOWN_CLOUD_VENDORS, KNOWN_INFRASTRUCTURE, IMPORT_REGEX
-from app.security import check_vulnerabilities
+from app.ingestion import (
+    scan_project_directory,
+    extract_package_lock_dependencies,
+    resolve_multi_tier_transitives,
+    KNOWN_CLOUD_VENDORS,
+    KNOWN_INFRASTRUCTURE,
+    IMPORT_REGEX
+)
+from app.security import check_vulnerabilities, probe_all_endpoints
 from app.intelligence.service import ThirdPartyIntelligenceService
 
-intel_service = ThirdPartyIntelligenceService()
-
 router = APIRouter()
+intel_service = ThirdPartyIntelligenceService()
 
 class DirectPayloadScan(BaseModel):
     project_name: str = "Uploaded Project"
     files: Dict[str, str] = {}
 
-
-def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
+def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
     scan_id = str(uuid.uuid4())
     project_name = project_data.get("project_name", "Target Project")
     services = project_data.get("services", {})
     overall_deps = project_data.get("dependencies", {})
     transitives = project_data.get("transitive_dependencies", {})
+    deep_transitives = project_data.get("deep_transitive_dependencies", {})
     infras = project_data.get("infrastructure_nodes", [])
     observed_hosts = project_data.get("observed_hosts", [])
     evidence_map = project_data.get("evidence_records", {})
@@ -38,12 +45,17 @@ def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
     is_python = any(s.get("ecosystem") == "PyPI" for s in services.values())
     ecosystem = "PyPI" if is_python else "npm"
 
-    # Query real OSV database across direct and key transitive packages
+    # Query real OSV database across direct, transitive, and deep transitive packages
     all_packages_to_check = dict(overall_deps)
     for parent, child_dict in transitives.items():
         all_packages_to_check.update(child_dict)
+    for parent, deep_dict in deep_transitives.items():
+        all_packages_to_check.update(deep_dict)
 
     vulns = check_vulnerabilities(all_packages_to_check, ecosystem=ecosystem)
+
+    # Active HTTP reachability health check for all observed external endpoints
+    endpoint_probes = probe_all_endpoints(observed_hosts)
 
     nodes = []
     edges = []
@@ -72,107 +84,144 @@ def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
     # TIER 2: INTERNAL SERVICES / MICROSERVICES
     # ----------------------------------------------------
     service_node_ids = []
-    for s_key, s_data in services.items():
+    active_services = {k: v for k, v in services.items() if v.get("dependencies") or v.get("external_calls")}
+    if not active_services:
+        active_services = {
+            "core": {
+                "name": f"{project_name} Core",
+                "dependencies": overall_deps,
+                "external_calls": observed_hosts,
+                "ecosystem": ecosystem
+            }
+        }
+
+    for s_key, s_data in active_services.items():
         s_id = f"service:{clean_name}-{s_key}"
         service_node_ids.append(s_id)
         nodes.append({
             "id": s_id,
-            "label": s_data.get("name", s_key.capitalize()),
-            "type": "service",
+            "label": s_data.get("name", f"{s_key.capitalize()} Service"),
+            "type": "internal_service",
             "tier": 2,
             "provenance": "declared",
             "status": "healthy",
-            "criticality": "high",
-            "metadata": {
-                "ecosystem": s_data.get("ecosystem", ecosystem),
-                "dependency_count": len(s_data.get("dependencies", {}))
-            }
+            "criticality": "critical",
+            "metadata": {"path": s_data.get("path", "")}
         })
         edges.append({
-            "id": f"e_app_{edge_counter}",
+            "id": f"e_app_to_{s_key}",
             "source": app_id,
             "target": s_id,
-            "relation": "contains_service",
+            "relation": "calls_service",
             "provenance": "declared",
             "confidence_score": 1.0
         })
-        edge_counter += 1
 
         svc_deps = list(s_data.get("dependencies", {}).items())
 
         # ----------------------------------------------------
-        # TIER 3: DIRECT PACKAGES
+        # TIER 3: DECLARED DIRECT SOFTWARE PACKAGES
         # ----------------------------------------------------
         for pkg_name, ver in svc_deps:
-            pkg_id = f"pkg:{pkg_name}"
+            clean_ver = str(ver).replace("^", "").replace("~", "").replace(">", "").replace("=", "").strip()
+            if len(clean_ver) > 18:
+                clean_ver = clean_ver[:18]
             is_vuln = any(v["package"] == pkg_name for v in vulns)
-            pkg_vulns = [v for v in vulns if v["package"] == pkg_name]
+            pkg_id = f"pkg:{pkg_name}"
 
             if not any(n["id"] == pkg_id for n in nodes):
                 nodes.append({
                     "id": pkg_id,
-                    "label": f"{pkg_name}@{ver}",
-                    "type": "package",
+                    "label": f"{pkg_name}",
+                    "type": "software_package",
+                    "subtype": "direct",
                     "tier": 3,
-                    "package_name": pkg_name,
-                    "version": ver,
-                    "ecosystem": ecosystem,
+                    "version": clean_ver,
                     "provenance": "declared",
-                    "status": "vulnerable" if is_vuln else "healthy",
-                    "criticality": "critical" if any(v["severity"] == "critical" for v in pkg_vulns) else ("high" if is_vuln else "medium"),
-                    "metadata": {
-                        "version": ver,
-                        "vulnerabilities": pkg_vulns
-                    }
+                    "status": "compromised" if is_vuln else "healthy",
+                    "criticality": "critical" if is_vuln else "medium",
+                    "metadata": {"version": clean_ver}
                 })
-
             edges.append({
                 "id": f"e_pkg_{edge_counter}",
                 "source": s_id,
                 "target": pkg_id,
-                "relation": "imports_package",
+                "relation": "depends_on",
                 "provenance": "declared",
                 "confidence_score": 1.0
             })
             edge_counter += 1
 
             # ----------------------------------------------------
-            # TIER 3b: TRANSITIVE DEPENDENCIES
+            # TIER 4: TRANSITIVE SUB-DEPENDENCIES (Layer 2)
             # ----------------------------------------------------
             if pkg_name in transitives:
-                for t_name, t_ver in list(transitives[pkg_name].items())[:6]:
-                    trans_id = f"pkg:trans:{t_name}"
-                    is_t_vuln = any(v["package"] == t_name for v in vulns)
+                for child_pkg, child_ver in transitives[pkg_name].items():
+                    clean_cver = str(child_ver).replace("^", "").replace("~", "").strip()
+                    if len(clean_cver) > 18:
+                        clean_cver = clean_cver[:18]
+                    is_child_vuln = any(v["package"] == child_pkg for v in vulns)
+                    child_id = f"pkg:trans:{child_pkg}"
 
-                    if not any(n["id"] == trans_id for n in nodes):
+                    if not any(n["id"] == child_id for n in nodes):
                         nodes.append({
-                            "id": trans_id,
-                            "label": f"{t_name}@{t_ver}",
-                            "type": "package_transitive",
-                            "tier": 3,
-                            "package_name": t_name,
-                            "version": t_ver,
-                            "ecosystem": ecosystem,
+                            "id": child_id,
+                            "label": f"{child_pkg}",
+                            "type": "software_package",
+                            "subtype": "transitive",
+                            "tier": 4,
+                            "version": clean_cver,
                             "provenance": "declared",
-                            "status": "vulnerable" if is_t_vuln else "healthy",
-                            "criticality": "high" if is_t_vuln else "low",
-                            "metadata": {
-                                "transitive": True,
-                                "parent": pkg_name
-                            }
+                            "status": "compromised" if is_child_vuln else "healthy",
+                            "criticality": "high" if is_child_vuln else "low",
+                            "metadata": {"version": clean_cver, "parent": pkg_name}
                         })
                     edges.append({
                         "id": f"e_trans_{edge_counter}",
                         "source": pkg_id,
-                        "target": trans_id,
+                        "target": child_id,
                         "relation": "depends_on_transitive",
                         "provenance": "declared",
                         "confidence_score": 0.95
                     })
                     edge_counter += 1
 
+                    # ----------------------------------------------------
+                    # TIER 5: DEEP TRANSITIVE SUB-DEPENDENCIES (Layer 3)
+                    # ----------------------------------------------------
+                    if child_pkg in deep_transitives:
+                        for deep_pkg, deep_ver in deep_transitives[child_pkg].items():
+                            clean_dver = str(deep_ver).replace("^", "").replace("~", "").strip()
+                            if len(clean_dver) > 18:
+                                clean_dver = clean_dver[:18]
+                            is_deep_vuln = any(v["package"] == deep_pkg for v in vulns)
+                            deep_id = f"pkg:deep:{deep_pkg}"
+
+                            if not any(n["id"] == deep_id for n in nodes):
+                                nodes.append({
+                                    "id": deep_id,
+                                    "label": f"{deep_pkg}",
+                                    "type": "software_package",
+                                    "subtype": "deep_transitive",
+                                    "tier": 5,
+                                    "version": clean_dver,
+                                    "provenance": "declared",
+                                    "status": "compromised" if is_deep_vuln else "healthy",
+                                    "criticality": "high" if is_deep_vuln else "low",
+                                    "metadata": {"version": clean_dver, "parent": child_pkg}
+                                })
+                            edges.append({
+                                "id": f"e_deep_{edge_counter}",
+                                "source": child_id,
+                                "target": deep_id,
+                                "relation": "depends_on_deep_transitive",
+                                "provenance": "declared",
+                                "confidence_score": 0.90
+                            })
+                            edge_counter += 1
+
         # ----------------------------------------------------
-        # TIER 4a: DECLARED INFRASTRUCTURE (Databases & Caches)
+        # TIER 3: INFRASTRUCTURE (Databases, Caches, Brokers)
         # ----------------------------------------------------
         for inf in infras:
             inf_id = inf["id"]
@@ -181,32 +230,29 @@ def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
                     "id": inf_id,
                     "label": inf["name"],
                     "type": "infrastructure_resource",
-                    "tier": 4,
+                    "tier": 3,
+                    "category": inf.get("category", "database"),
                     "provenance": "declared",
                     "status": "healthy",
                     "criticality": "critical",
-                    "metadata": {
-                        "category": inf.get("category", "database"),
-                        "image": inf.get("image", "latest")
-                    }
+                    "metadata": {"image": inf.get("image", "latest")}
                 })
             edges.append({
-                "id": f"e_inf_{edge_counter}",
+                "id": f"e_infra_{edge_counter}",
                 "source": s_id,
                 "target": inf_id,
-                "relation": "persists_to",
+                "relation": "queries_database" if "database" in inf.get("category", "") else "uses_cache",
                 "provenance": "declared",
                 "confidence_score": 1.0
             })
             edge_counter += 1
 
         # ----------------------------------------------------
-        # TIER 4b: CLOUD VENDORS & EXTERNAL APIS
+        # TIER 4: EXTERNAL CLOUD SERVICES & APIS (Deduplicated)
         # ----------------------------------------------------
-        ext_calls = list(s_data.get("external_calls") or [])
-        for host in observed_hosts:
-            if host not in ext_calls:
-                ext_calls.append(host)
+        ext_calls = s_data.get("external_calls", [])
+        if isinstance(ext_calls, set):
+            ext_calls = list(ext_calls)
 
         processed_vendors = set()
         for host in ext_calls:
@@ -271,8 +317,12 @@ def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
                         })
                         edge_counter += 1
             else:
-                # Direct observed external / shadow API
+                # Direct observed external / shadow API with real health probe status
                 host_id = f"ext:{host}"
+                probe = endpoint_probes.get(host, {})
+                probe_status = probe.get("status", "healthy")
+                node_status = "compromised" if probe_status == "down" else ("warning" if probe_status == "degraded" else "healthy")
+
                 if not any(n["id"] == host_id for n in nodes):
                     nodes.append({
                         "id": host_id,
@@ -281,9 +331,15 @@ def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
                         "tier": 4,
                         "host": host,
                         "provenance": "observed",
-                        "status": "warning",
-                        "criticality": "high",
-                        "metadata": {"host": host, "category": "external_api"}
+                        "status": node_status,
+                        "criticality": "critical" if probe_status == "down" else "high",
+                        "metadata": {
+                            "host": host,
+                            "category": "external_api",
+                            "probe_status": probe_status,
+                            "latency_ms": probe.get("latency_ms", 0),
+                            "probe_error": probe.get("error", "")
+                        }
                     })
                 edges.append({
                     "id": f"e_ext_{edge_counter}",
@@ -319,14 +375,14 @@ def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
         })
 
     # ----------------------------------------------------
-    # Generate Findings (OSV + discrepancy + integration intelligence)
+    # Generate Findings (OSV + Drift + Active Outages + Intel)
     # ----------------------------------------------------
     findings = []
     finding_idx = 1
 
     for v in vulns:
         target_node = next(
-            (n for n in nodes if n["id"] == f"pkg:{v['package']}" or n["id"] == f"pkg:trans:{v['package']}"),
+            (n for n in nodes if n["id"] in (f"pkg:{v['package']}", f"pkg:trans:{v['package']}", f"pkg:deep:{v['package']}")),
             None
         )
         findings.append({
@@ -379,6 +435,30 @@ def build_unified_graph(project_data: Dict[str, Any]) -> Dict[str, Any]:
             }
         })
         finding_idx += 1
+
+    # Active Live Outage Findings from HTTP Probes
+    for host, probe in endpoint_probes.items():
+        if probe.get("status") == "down":
+            findings.append({
+                "id": f"find-{finding_idx:03d}",
+                "scan_id": scan_id,
+                "type": "live_outage_unreachable_endpoint",
+                "title": f"Live Outage Detected: {host}",
+                "description": f"Real-time health probe to external endpoint '{host}' failed ({probe.get('error', 'Host unreachable')}). Services depending on this endpoint risk cascading downtime.",
+                "severity": "critical",
+                "target_node_id": f"ext:{host}",
+                "affected_journey_ids": [journey_id],
+                "evidence_references": [f"http_probe:{host} (latency: {probe.get('latency_ms', 0)}ms)"],
+                "security_details": {
+                    "advisory_source": "Live Radar Health Check Prober",
+                    "failure_reason": probe.get("error", "Host failed to respond")
+                },
+                "remediation": {
+                    "summary": f"Isolate endpoint '{host}' via Circuit Breaker",
+                    "recommended_action": f"Endpoint '{host}' is currently failing requests. Activate local fallback cache or route to secondary API."
+                }
+            })
+            finding_idx += 1
 
     # Run Third-Party Integration Intelligence Rules if path exists
     try:
@@ -534,23 +614,11 @@ async def create_scan(request: ScanRequest):
         runtime_traces = parse_runtime_traces(request.trace_file_path)
         obs = project_scan.setdefault("observed_hosts", [])
         for t in runtime_traces:
-            dest = t.get("destination_host")
-            if dest and dest not in obs:
-                obs.append(dest)
-                project_scan.setdefault("evidence_records", {}).setdefault(dest, []).append(
-                    f"runtime_trace:{t.get('span_id', 'span')}"
-                )
+            h = t.get("destination_host")
+            if h and h not in obs:
+                obs.append(h)
 
-    scan_record = build_unified_graph(project_scan)
-    scan_id = scan_record["scan_id"]
-    await ScanRepository.save_scan(scan_record)
-    if scan_id in db.in_memory_graphs:
-        await GraphRepository.save_graph(db.in_memory_graphs[scan_id])
-    if scan_id in db.in_memory_findings:
-        await FindingRepository.save_findings(scan_id, db.in_memory_findings[scan_id])
-    if scan_id in db.in_memory_evidence:
-        await EvidenceRepository.save_evidence(scan_id, db.in_memory_evidence[scan_id])
-    return scan_record
+    return build_unified_graph(project_scan)
 
 
 @router.post("/direct")
@@ -562,13 +630,17 @@ async def scan_direct_files(payload: DirectPayloadScan):
     evidence_map = {}
     URL_REGEX = re.compile(r'https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s"\'<>)]*)?')
 
-    temp_dir = tempfile.mkdtemp(prefix="blindspot_direct_")
+    temp_dir = tempfile.mkdtemp(prefix="hdx_scan_")
     try:
         for fname, content in payload.files.items():
-            full_p = os.path.join(temp_dir, fname)
-            os.makedirs(os.path.dirname(full_p), exist_ok=True)
-            with open(full_p, "w", encoding="utf-8") as f:
-                f.write(content)
+            safe_fname = fname.replace("..", "").lstrip("/\\")
+            full_path = os.path.join(temp_dir, safe_fname)
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            try:
+                with open(full_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+            except Exception:
+                pass
 
             fname_lower = fname.lower()
 
@@ -585,24 +657,9 @@ async def scan_direct_files(payload: DirectPayloadScan):
             elif fname_lower.endswith("package-lock.json"):
                 try:
                     lock_data = json.loads(content)
-                    # v2/v3 format
-                    packages = lock_data.get("packages", {})
-                    for pkg_path, pkg_info in packages.items():
-                        if pkg_path and pkg_path != "":
-                            clean_name = pkg_path.replace("node_modules/", "").strip("/")
-                            child_deps = pkg_info.get("dependencies", {})
-                            if child_deps:
-                                transitives.setdefault(clean_name, {}).update(child_deps)
-                            if not deps.get(clean_name) and pkg_info.get("version"):
-                                deps[clean_name] = pkg_info["version"]
-                    # v1 format
-                    v1_deps = lock_data.get("dependencies", {})
-                    for parent_name, parent_info in v1_deps.items():
-                        child_deps = parent_info.get("dependencies", {})
-                        if isinstance(child_deps, dict):
-                            for child_name, child_meta in child_deps.items():
-                                ver = child_meta.get("version", "*") if isinstance(child_meta, dict) else str(child_meta)
-                                transitives.setdefault(parent_name, {})[child_name] = ver
+                    parsed_lock = extract_package_lock_dependencies(lock_data)
+                    for p, c in parsed_lock.items():
+                        transitives.setdefault(p, {}).update(c)
                 except Exception:
                     pass
 
@@ -686,14 +743,8 @@ async def scan_direct_files(payload: DirectPayloadScan):
                         observed_hosts.add(host)
                         evidence_map.setdefault(host, []).append(fname)
 
-        from app.ingestion import KNOWN_NODE_TRANSITIVES, KNOWN_PYTHON_TRANSITIVES
         is_python = any(fname.endswith(("requirements.txt", "pipfile")) for fname in payload.files.keys())
-        for pkg in deps:
-            clean_p = pkg.lower()
-            if clean_p in KNOWN_NODE_TRANSITIVES:
-                transitives.setdefault(pkg, {}).update(KNOWN_NODE_TRANSITIVES[clean_p])
-            elif clean_p in KNOWN_PYTHON_TRANSITIVES:
-                transitives.setdefault(pkg, {}).update(KNOWN_PYTHON_TRANSITIVES[clean_p])
+        layer_2_trans, layer_3_deep = resolve_multi_tier_transitives(deps, transitives)
 
         project_data = {
             "project_name": payload.project_name,
@@ -707,7 +758,8 @@ async def scan_direct_files(payload: DirectPayloadScan):
                 }
             },
             "dependencies": deps,
-            "transitive_dependencies": transitives,
+            "transitive_dependencies": layer_2_trans,
+            "deep_transitive_dependencies": layer_3_deep,
             "infrastructure_nodes": infras,
             "observed_hosts": list(observed_hosts),
             "evidence_records": evidence_map
@@ -717,6 +769,44 @@ async def scan_direct_files(payload: DirectPayloadScan):
     finally:
         if temp_dir and os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@router.post("/upload-zip")
+async def scan_zip_file(file: UploadFile = File(...)):
+    """
+    Accepts full project ZIP archive, unzips in isolated temp directory,
+    recursively scans manifests, lockfiles, environment and imports,
+    and constructs multi-tier architectural dependency graph.
+    """
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be a .zip archive.")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        zip_path = os.path.join(tmp_dir, "archive.zip")
+        extract_dir = os.path.join(tmp_dir, "extracted")
+        os.makedirs(extract_dir, exist_ok=True)
+
+        with open(zip_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(extract_dir)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to unpack ZIP archive: {e}")
+
+        # Scan the extracted project directory
+        project_scan = scan_project_directory(extract_dir)
+        if "error" in project_scan:
+            raise HTTPException(status_code=400, detail=project_scan["error"])
+
+        # Override project name if generic
+        clean_name = os.path.splitext(file.filename)[0].replace(".tar", "").replace("-main", "").replace("-master", "")
+        if project_scan.get("project_name") in ("extracted", "Unnamed Project", "", "core"):
+            project_scan["project_name"] = clean_name
+
+        return build_unified_graph(project_scan)
 
 
 @router.get("")

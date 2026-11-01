@@ -6,7 +6,9 @@ using standard JSON-RPC and the Memo program pattern.
 import httpx
 import logging
 import hashlib
+import os
 from typing import Dict, Any, Optional
+from app.security import is_offline_mode
 
 logger = logging.getLogger("hdx.solana")
 
@@ -17,9 +19,12 @@ MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
 SAMPLE_DEVNET_TX = "4uQeVj5tqTWfBqJ1wP8Pq8wY9f4jK8Z8K8Z8K8Z8K8Z8K8Z8K8Z8K8Z8K8Z8K8Z8"
 
 async def check_solana_devnet_status(rpc_url: str = DEFAULT_DEVNET_RPC) -> Dict[str, Any]:
-    """Checks Solana Devnet cluster availability."""
+    """Checks Solana Devnet cluster availability with fast offline guard."""
+    if is_offline_mode():
+        return {"online": False, "cluster": "devnet (offline mode)", "current_slot": 318942104, "rpc_url": rpc_url}
+
     try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
+        async with httpx.AsyncClient(timeout=1.5) as client:
             resp = await client.post(
                 rpc_url,
                 json={"jsonrpc": "2.0", "id": 1, "method": "getHealth"}

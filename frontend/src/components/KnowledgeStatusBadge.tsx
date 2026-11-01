@@ -146,6 +146,27 @@ export const KnowledgeStatusBadge: React.FC<KnowledgeStatusBadgeProps> = ({ isOp
             </code>
           </div>
 
+          {/* Architecture Justification: Solana & MongoDB */}
+          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-purple-400 block">
+              Cryptographic Trust Architecture: Why Solana & MongoDB?
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-300">
+              <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800/80 space-y-1">
+                <span className="font-semibold text-purple-300 block">Solana Devnet (Immutability Proof)</span>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  In zero-trust supply chains, local CVE databases can be modified by attackers to hide compromised packages. Blindspot commits a SHA-256 Merkle root to the Solana blockchain via Memo transactions. Any auditor can verify that vulnerability records were never altered after discovery.
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800/80 space-y-1">
+                <span className="font-semibold text-emerald-300 block">MongoDB (Dynamic AST Graph Store)</span>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  Dependency trees have arbitrary nesting depths (transitive sub-dependencies, vendor upstream topologies, runtime trace spans). MongoDB's schema-free BSON documents store polymorphic graph snapshots and cross-session historical diffs without rigid tabular normalization constraints.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Tamper Test Toggle */}
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
             <div>

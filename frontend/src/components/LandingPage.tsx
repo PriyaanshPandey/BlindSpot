@@ -3,6 +3,7 @@ import { Folder, ArrowRight, ChevronDown } from 'lucide-react';
 
 interface LandingPageProps {
   onScanFiles: (projectName: string, files: Record<string, string>) => Promise<void>;
+  onScanZip?: (file: File) => Promise<void>;
   onStartScan?: (projectName: string) => void;
   isScanning: boolean;
 }
@@ -16,10 +17,12 @@ const ROTATING_TEXTS = [
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onScanFiles,
+  onScanZip,
   onStartScan,
   isScanning
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
   const [scanStatusText, setScanStatusText] = useState<string>('');
 
   // 1. Smooth Scroll Parallax Reaction for Background Video
@@ -164,7 +167,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     ];
 
     let filesProcessed = 0;
-    const maxFiles = 300;
+    const maxFiles = 1500;
 
     for (let i = 0; i < fileList.length && filesProcessed < maxFiles; i++) {
       const file = fileList[i];
@@ -187,7 +190,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         lowerName.startsWith('.env') ||
         lowerName === 'dockerfile';
 
-      if (isTargetFile && file.size < 600000) {
+      // 25MB for lockfiles, 2MB for source code
+      const isLockfile = lowerName.includes('lock') || lowerName.endsWith('.json');
+      const sizeLimit = isLockfile ? 25000000 : 2000000;
+
+      if (isTargetFile && file.size < sizeLimit) {
         try {
           const content = await file.text();
           filesToRead[relPath] = content;
@@ -200,6 +207,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     setScanStatusText('Scanning codebase...');
     await onScanFiles(detectedProjectName, filesToRead);
+  };
+
+  const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const cleanName = file.name.replace(/\.zip$/i, '');
+    onStartScan?.(cleanName);
+    setScanStatusText('Scanning codebase archive...');
+    if (onScanZip) {
+      await onScanZip(file);
+    }
   };
 
   const scrollToFeatures = () => {
@@ -281,8 +299,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </p>
           </div>
 
-          {/* Restored Favorite "Upload Codebase" Button */}
-          <div className="flex flex-col items-center">
+          {/* Upload Buttons: Folder or ZIP Archive */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5">
             <input
               type="file"
               ref={fileInputRef}
@@ -293,11 +311,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               multiple
               className="hidden"
             />
+            <input
+              type="file"
+              ref={zipInputRef}
+              onChange={handleZipUpload}
+              accept=".zip"
+              className="hidden"
+            />
 
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isScanning}
-              className="group relative inline-flex items-center justify-center px-8 py-3.5 text-base sm:text-lg font-semibold tracking-wide text-white transition-all duration-300 ease-out rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 shadow-[0_0_35px_rgba(147,51,234,0.5)] hover:shadow-[0_0_60px_rgba(168,85,247,0.85)] hover:scale-105 active:scale-95 border border-purple-300/40 cursor-pointer disabled:opacity-50"
+              className="group relative inline-flex items-center justify-center px-7 py-3.5 text-base sm:text-lg font-semibold tracking-wide text-white transition-all duration-300 ease-out rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 shadow-[0_0_35px_rgba(147,51,234,0.5)] hover:shadow-[0_0_60px_rgba(168,85,247,0.85)] hover:scale-105 active:scale-95 border border-purple-300/40 cursor-pointer disabled:opacity-50"
             >
               {isScanning ? (
                 <div className="flex items-center gap-3">
@@ -307,10 +332,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               ) : (
                 <div className="flex items-center gap-2.5">
                   <Folder className="w-5 h-5 text-purple-200 group-hover:scale-110 transition-transform duration-200" />
-                  <span>Upload Codebase</span>
+                  <span>Upload Folder</span>
                   <ArrowRight className="w-4 h-4 text-purple-200 group-hover:translate-x-1 transition-transform duration-200" />
                 </div>
               )}
+            </button>
+
+            <button
+              onClick={() => zipInputRef.current?.click()}
+              disabled={isScanning}
+              className="group relative inline-flex items-center justify-center px-6 py-3.5 text-base sm:text-lg font-semibold tracking-wide text-zinc-200 hover:text-white transition-all duration-300 ease-out rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-zinc-700/80 shadow-[0_0_25px_rgba(0,0,0,0.6)] hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
+            >
+              <div className="flex items-center gap-2">
+                <span>Upload .ZIP Archive</span>
+              </div>
             </button>
           </div>
         </div>

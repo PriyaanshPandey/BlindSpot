@@ -1,7 +1,11 @@
 import logging
 from typing import Optional, Dict, Any, List
 import asyncio
-from pymongo.errors import OperationFailure
+try:
+    from pymongo.errors import OperationFailure
+except ImportError:
+    class OperationFailure(Exception):
+        pass
 
 logger = logging.getLogger("hdx.db")
 
