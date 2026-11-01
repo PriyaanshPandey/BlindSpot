@@ -141,7 +141,7 @@ async def test_explain_finding_successful_mock():
 # 5. Invalid Key Authentication Error Test
 @pytest.mark.asyncio
 async def test_explain_finding_invalid_key_auth_error():
-    err_obj = APIError("API key not valid. Please pass a valid API key.", 400)
+    err_obj = APIError(400, {"message": "API key not valid. Please pass a valid API key."})
     err_obj.code = 400
 
     with patch("app.integrations.gemini.get_gemini_api_key", return_value="invalid_key"), \
@@ -164,7 +164,7 @@ async def test_explain_finding_invalid_key_auth_error():
 # 6. Quota Exceeded Rate Limit Test
 @pytest.mark.asyncio
 async def test_explain_finding_quota_error():
-    err_obj = APIError("Resource has been exhausted (e.g. check quota).", 429)
+    err_obj = APIError(429, {"message": "Resource has been exhausted (e.g. check quota)."})
     err_obj.code = 429
 
     with patch("app.integrations.gemini.get_gemini_api_key", return_value="key"), \
@@ -205,7 +205,7 @@ async def test_explain_finding_timeout_error():
 # 8. Model Unavailable Test
 @pytest.mark.asyncio
 async def test_explain_finding_model_unavailable_error():
-    err_obj = APIError("models/unknown-model is not found for API version v1beta", 404)
+    err_obj = APIError(404, {"message": "models/unknown-model is not found for API version v1beta"})
     err_obj.code = 404
 
     with patch("app.integrations.gemini.get_gemini_api_key", return_value="key"), \

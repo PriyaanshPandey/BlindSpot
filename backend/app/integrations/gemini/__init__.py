@@ -137,6 +137,7 @@ def get_fallback_explanation(sanitized: Dict[str, Any], error_code: str = STATUS
     cve = sanitized.get("cve_id") or "Security Advisory"
     sev = sanitized.get("severity", "medium")
     journey = sanitized.get("affected_business_journey", "Core Operations")
+    audience = str(sanitized.get("audience", "builder")).lower()
 
     if audience in ["builder", "developer"]:
         summary = f"Package '{pkg}' (v{ver}) is affected by {cve}. Connected to journey '{journey}'."
