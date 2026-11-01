@@ -88,7 +88,7 @@ def _strip_canaries(text: str) -> str:
     return cleaned
 
 
-def sanitize_context_for_gemini(raw_context: Dict[str, Any]) -> Dict[str, Any]:
+def sanitize_context_for_gemini(raw_context: Dict[str, Any], audience: Optional[str] = None) -> Dict[str, Any]:
     """
     Strict Privacy Filter:
     Explicitly whitelist only safe public vulnerability metadata.
@@ -101,11 +101,11 @@ def sanitize_context_for_gemini(raw_context: Dict[str, Any]) -> Dict[str, Any]:
     
     title = _strip_canaries(str(raw_context.get("title", "")))
     pkg = _strip_canaries(pkg_clean)
-    ver = _strip_canaries(str(raw_context.get("version", "unknown")))
+    ver = _strip_canaries(str(raw_context.get("version") or raw_context.get("installed_version") or "unknown"))
     cve = _strip_canaries(str(raw_context.get("cve_id") or "")) if raw_context.get("cve_id") else None
     sev = str(raw_context.get("severity", "medium")).lower()
     journey = _strip_canaries(str(raw_context.get("journey_name") or raw_context.get("affected_business_journey") or "Core Business Operation"))
-    aud = str(raw_context.get("audience", "builder")).lower()
+    aud = str(audience or raw_context.get("audience", "builder")).lower()
 
     authoritative = resolve_authoritative_advisory(
         package_name=pkg,

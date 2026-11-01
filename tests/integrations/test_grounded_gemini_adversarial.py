@@ -237,3 +237,4 @@ async def test_explain_finding_e2e_grounding_preservation():
     assert vf["is_verified_vulnerable"] is False
     assert vf["verification_status"] == "ALREADY_FIXED"
     assert vf["fixed_version"] == "0.21.1"
+

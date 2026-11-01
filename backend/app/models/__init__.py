@@ -203,6 +203,8 @@ class MitigationStrategy(BaseModel):
     title: str
     description: str
     estimated_risk_reduction_pct: float
+    baseline_risk_score: Optional[float] = None
+    post_mitigation_risk_score: Optional[float] = None
 
 class SimulationImpactResults(BaseModel):
     blast_radius_node_count: int
@@ -211,6 +213,8 @@ class SimulationImpactResults(BaseModel):
     total_estimated_gross_exposure: float
     exposure_currency: str = "USD"
     mitigation_strategies: List[MitigationStrategy] = Field(default_factory=list)
+    architecture_impact_score: Optional[float] = None
+    system_impact_percentage: Optional[float] = None
 
 class ScenarioModel(BaseModel):
     scenario_id: str

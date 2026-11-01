@@ -1,8 +1,9 @@
 """
 Analysis Subsystem [Role B]:
-Calculates business journey disruption and financial exposure from dependency outages.
+Calculates business journey disruption and architectural impact from dependency outages.
 Implements the business impact formula:
 Gross Exposure = sum(Hourly_Tx * Avg_Tx_Value * Duration * Disruption_Fraction)
+Architecture Impact Score (0–100) = Journey Disruption (0-55) + Blast Radius (0-25) + Outage Duration (0-20)
 """
 from typing import Dict, Any, List, Optional
 import logging
@@ -33,6 +34,26 @@ DEFAULT_JOURNEY_METRICS = {
         "critical_nodes": []
     }
 }
+
+
+def compute_architecture_impact_score(
+    max_disruption: float,
+    blast_node_count: int,
+    duration_hours: float
+) -> float:
+    """
+    Computes transparent Architecture Impact Score on a 0-100 scale:
+    - Input 1: Journey Disruption (0.0 to 1.0) -> scaled to 0-55 points (Weight: 55%)
+    - Input 2: Blast Radius (node count) -> min(count * 5.0, 25.0) points (Weight: 25%)
+    - Input 3: Outage Duration (hours) -> min(hours * 0.85, 20.0) points (Weight: 20%)
+    Total Scale: 0.0 to 100.0 (strictly bounded, no artificial minimum).
+    """
+    journey_weight = max(0.0, min(1.0, float(max_disruption))) * 55.0
+    blast_weight = min(max(0, int(blast_node_count)) * 5.0, 25.0)
+    duration_weight = min(max(0.0, float(duration_hours)) * 0.85, 20.0)
+    score = min(100.0, max(0.0, round(journey_weight + blast_weight + duration_weight, 1)))
+    return score
+
 
 def calculate_financial_exposure(
     impacted_nodes: List[str],
@@ -92,37 +113,68 @@ def calculate_financial_exposure(
     # Sort journeys by highest exposure first
     impacted_journeys.sort(key=lambda x: x["financial_exposure"], reverse=True)
 
-    # Tailored mitigation strategies
+    # 1. Baseline Architecture Impact Score (0-100)
+    max_disruption = max([j["disruption_fraction"] for j in impacted_journeys], default=0.0) if impacted_journeys else 0.0
+    baseline_risk_score = compute_architecture_impact_score(
+        max_disruption=max_disruption,
+        blast_node_count=len(impacted_nodes),
+        duration_hours=failure_duration_hours
+    )
+
+    # 2. Simulate post-mitigation risk for each strategy and calculate risk reduction by comparing baseline vs post-mitigation
+    # Strategy A: Circuit Breaker (Isolates blast radius to target, prevents caller degradation)
+    post_blast_cb = max(1, round(len(impacted_nodes) * 0.25))
+    post_disruption_cb = max(0.05, max_disruption * 0.20)
+    post_duration_cb = max(1.0, failure_duration_hours * 0.30)
+    post_risk_cb = compute_architecture_impact_score(post_disruption_cb, post_blast_cb, post_duration_cb)
+    reduction_cb = round(((baseline_risk_score - post_risk_cb) / max(baseline_risk_score, 1.0)) * 100, 1) if baseline_risk_score > 0 else 0.0
+
+    # Strategy B: Secondary Gateway / Redundant Replica Failover (Routes traffic through redundant replica)
+    post_blast_fb = max(1, round(len(impacted_nodes) * 0.50))
+    post_disruption_fb = max(0.05, max_disruption * 0.15)
+    post_duration_fb = max(0.5, failure_duration_hours * 0.15)
+    post_risk_fb = compute_architecture_impact_score(post_disruption_fb, post_blast_fb, post_duration_fb)
+    reduction_fb = round(((baseline_risk_score - post_risk_fb) / max(baseline_risk_score, 1.0)) * 100, 1) if baseline_risk_score > 0 else 0.0
+
+    # Strategy C: Asynchronous Event Buffering & Retry Queue (Prevents transaction drop during transient outage)
+    post_blast_oq = max(1, round(len(impacted_nodes) * 0.60))
+    post_disruption_oq = max(0.10, max_disruption * 0.35)
+    post_duration_oq = max(1.0, failure_duration_hours * 0.40)
+    post_risk_oq = compute_architecture_impact_score(post_disruption_oq, post_blast_oq, post_duration_oq)
+    reduction_oq = round(((baseline_risk_score - post_risk_oq) / max(baseline_risk_score, 1.0)) * 100, 1) if baseline_risk_score > 0 else 0.0
+
     mitigation_strategies = [
         {
             "strategy_type": "fallback_provider",
             "title": "Automated Secondary Gateway Failover",
             "description": "Route checkout transactions through backup payment processor when latency exceeds 2.5s or error rate > 5%",
-            "estimated_risk_reduction_pct": 75.0
+            "baseline_risk_score": baseline_risk_score,
+            "post_mitigation_risk_score": post_risk_fb,
+            "estimated_risk_reduction_pct": max(5.0, min(95.0, reduction_fb))
         },
         {
             "strategy_type": "circuit_breaker",
             "title": "Circuit Breaker on External Integrations",
             "description": "Fail open or degrade gracefully for unessential external calls without halting the main transaction flow",
-            "estimated_risk_reduction_pct": 90.0
+            "baseline_risk_score": baseline_risk_score,
+            "post_mitigation_risk_score": post_risk_cb,
+            "estimated_risk_reduction_pct": max(5.0, min(95.0, reduction_cb))
         },
         {
             "strategy_type": "offline_queue",
             "title": "Asynchronous Event Buffering & Retry Queue",
             "description": "Buffer non-realtime mutations in local durable storage and replay with exponential backoff upon service restoration",
-            "estimated_risk_reduction_pct": 60.0
+            "baseline_risk_score": baseline_risk_score,
+            "post_mitigation_risk_score": post_risk_oq,
+            "estimated_risk_reduction_pct": max(5.0, min(95.0, reduction_oq))
         }
     ]
 
-    max_disruption = max([j["disruption_fraction"] for j in impacted_journeys], default=0.7)
-    blast_weight = min(len(impacted_nodes) * 5, 25)
-    duration_weight = min(failure_duration_hours * 0.85, 20)
-    system_impact_pct = min(99.0, max(28.0, round(max_disruption * 55.0 + blast_weight + duration_weight, 1)))
-
     return {
         "total_estimated_gross_exposure": round(total_exposure, 2),
-        "system_impact_percentage": system_impact_pct,
-        "severity_rating": "CRITICAL" if system_impact_pct >= 80 else ("HIGH" if system_impact_pct >= 60 else "MODERATE"),
+        "architecture_impact_score": baseline_risk_score,
+        "system_impact_percentage": baseline_risk_score,
+        "severity_rating": "CRITICAL" if baseline_risk_score >= 80 else ("HIGH" if baseline_risk_score >= 60 else ("MODERATE" if baseline_risk_score >= 35 else "LOW")),
         "exposure_currency": "USD",
         "impacted_journeys": impacted_journeys,
         "mitigation_strategies": mitigation_strategies

@@ -90,7 +90,10 @@ class SimulationEngine:
                 "impacted_journeys": financials["impacted_journeys"],
                 "total_estimated_gross_exposure": financials["total_estimated_gross_exposure"],
                 "exposure_currency": financials["exposure_currency"],
-                "mitigation_strategies": financials["mitigation_strategies"]
+                "mitigation_strategies": financials["mitigation_strategies"],
+                "architecture_impact_score": financials.get("architecture_impact_score"),
+                "system_impact_percentage": financials.get("system_impact_percentage"),
+                "severity_rating": financials.get("severity_rating", "HIGH")
             }
         }
 

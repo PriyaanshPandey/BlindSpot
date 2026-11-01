@@ -3,6 +3,7 @@ import uuid
 from typing import Set, List, Dict, Any, Optional
 from datetime import datetime
 
+from app.analysis import compute_architecture_impact_score
 from app.models import SimulationRequest
 from app.db import db
 from app.db.repositories import GraphRepository, ScenarioRepository, ScanRepository
@@ -136,6 +137,27 @@ async def simulate_failure(scan_id: str, request: SimulationRequest):
     else:
         total_exposure = 0.0
 
+    # Calculate Architecture Impact Score (0-100) and dynamic risk reduction by comparing baseline vs post-mitigation
+    max_j_disruption = 1.0 if journeys else min(1.0, weighted_impact_pct / 100.0)
+    baseline_arch_score = compute_architecture_impact_score(
+        max_disruption=max_j_disruption,
+        blast_node_count=len(impacted_list),
+        duration_hours=request.failure_duration_hours
+    )
+
+    # Dynamic post-mitigation risk simulation
+    post_blast_cb = max(1, round(len(impacted_list) * 0.25))
+    post_disrupt_cb = max(0.05, max_j_disruption * 0.20)
+    post_dur_cb = max(1.0, request.failure_duration_hours * 0.30)
+    post_risk_cb = compute_architecture_impact_score(post_disrupt_cb, post_blast_cb, post_dur_cb)
+    cb_reduction = round(((baseline_arch_score - post_risk_cb) / max(baseline_arch_score, 1.0)) * 100, 1) if baseline_arch_score > 0 else 0.0
+
+    post_blast_fb = max(1, round(len(impacted_list) * 0.50))
+    post_disrupt_fb = max(0.05, max_j_disruption * 0.15)
+    post_dur_fb = max(0.5, request.failure_duration_hours * 0.15)
+    post_risk_fb = compute_architecture_impact_score(post_disrupt_fb, post_blast_fb, post_dur_fb)
+    fb_reduction = round(((baseline_arch_score - post_risk_fb) / max(baseline_arch_score, 1.0)) * 100, 1) if baseline_arch_score > 0 else 0.0
+
     scenario_result = {
         "scenario_id": scenario_id,
         "scan_id": scan_id,
@@ -178,18 +200,23 @@ async def simulate_failure(scan_id: str, request: SimulationRequest):
                     "financial_exposure": total_exposure
                 }
             ],
+            "architecture_impact_score": baseline_arch_score,
             "mitigation_strategies": [
                 {
                     "strategy_type": "circuit_breaker",
                     "title": f"Deploy Circuit Breaker for {target_label}",
                     "description": f"Isolate {target_label} with exponential backoff and timeout fallback to prevent cascading degradation of callers.",
-                    "estimated_risk_reduction_pct": 82.0
+                    "baseline_risk_score": baseline_arch_score,
+                    "post_mitigation_risk_score": post_risk_cb,
+                    "estimated_risk_reduction_pct": max(5.0, min(95.0, cb_reduction))
                 },
                 {
                     "strategy_type": "graceful_fallback",
                     "title": "Enable Degraded Read-Only / Secondary Failover",
                     "description": "Serve cached responses or route traffic to redundant regional replica when primary target is unreachable.",
-                    "estimated_risk_reduction_pct": 74.0
+                    "baseline_risk_score": baseline_arch_score,
+                    "post_mitigation_risk_score": post_risk_fb,
+                    "estimated_risk_reduction_pct": max(5.0, min(95.0, fb_reduction))
                 }
             ]
         }

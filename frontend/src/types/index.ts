@@ -103,11 +103,14 @@ export interface SimulationResult {
     total_estimated_gross_exposure: number;
     exposure_currency: string;
     impacted_journeys: ImpactedJourney[];
+    architecture_impact_score?: number;
     mitigation_strategies: Array<{
       strategy_type: string;
       title: string;
       description: string;
       estimated_risk_reduction_pct: number;
+      baseline_risk_score?: number;
+      post_mitigation_risk_score?: number;
     }>;
   };
 }
