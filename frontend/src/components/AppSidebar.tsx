@@ -96,15 +96,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               className="flex items-center gap-2.5 cursor-pointer group"
               title="Return to Landing"
             >
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-rose-600 via-purple-600 to-indigo-600 flex items-center justify-center shadow-[0_0_15px_rgba(244,63,94,0.4)] group-hover:scale-105 transition-transform">
-                <ShieldCheck className="w-4 h-4 text-white" />
-              </div>
-              <div>
+              <div className="h-10 flex items-center gap-2 group-hover:scale-105 transition-transform">
+                <img src="/logo.png" alt="BlindSpot Logo" className="h-9 w-auto object-contain rounded-lg" />
                 <span className="font-extrabold text-sm tracking-tight text-white block">
                   BLINDSPOT
-                </span>
-                <span className="text-[10px] text-rose-400 font-semibold tracking-wider uppercase block -mt-1">
-                  HDX ENGINE
                 </span>
               </div>
             </div>
@@ -113,10 +108,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           {isCollapsed && (
             <div
               onClick={onGoToLanding}
-              className="w-8 h-8 rounded-xl bg-gradient-to-tr from-rose-600 to-purple-600 flex items-center justify-center mx-auto cursor-pointer shadow-md"
+              className="w-9 h-9 flex items-center justify-center mx-auto cursor-pointer"
               title="Return to Landing"
             >
-              <ShieldCheck className="w-4 h-4 text-white" />
+              <img src="/logo.png" alt="BlindSpot Logo" className="w-7 h-7 object-contain rounded-lg" />
             </div>
           )}
 

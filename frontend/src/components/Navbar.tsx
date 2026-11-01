@@ -38,17 +38,15 @@ export const Navbar: React.FC<NavbarProps> = ({
         className="flex items-center gap-3 cursor-pointer group hover:opacity-90 transition-opacity"
         title="Return to Landing Page"
       >
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 via-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20 shrink-0 group-hover:scale-105 transition-transform">
-          <Shield className="w-5 h-5 text-white" />
+        <div className="w-10 h-10 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center shadow-lg shrink-0 group-hover:scale-105 transition-transform p-1">
+          <img src="/logo.png" alt="BlindSpot Logo" className="w-8 h-8 object-contain rounded-lg" />
         </div>
         <div>
           <div className="flex items-center gap-2">
             <span className="font-bold text-base tracking-tight bg-gradient-to-r from-white via-violet-200 to-purple-300 bg-clip-text text-transparent">
               BlindSpot
             </span>
-            <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
-              HDX
-            </span>
+
             {onGoToLanding && (
               <span className="text-[10px] text-slate-400 border border-slate-700/60 rounded px-1.5 py-0.5 hover:bg-slate-800">
                 ← Landing
@@ -122,32 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mode Switcher & Trust Modal */}
       <div className="flex items-center gap-3">
-        {setMode && (
-          <div className="bg-slate-900/90 p-1 rounded-xl border border-slate-800 flex items-center shadow-inner">
-            <button
-              onClick={() => setMode('builder')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                mode === 'builder'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Wrench className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Builder Mode</span>
-            </button>
-            <button
-              onClick={() => setMode('enterprise')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                mode === 'enterprise'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Enterprise Mode</span>
-            </button>
-          </div>
-        )}
+
 
         {/* Trust & Knowledge Modal Trigger */}
         <button

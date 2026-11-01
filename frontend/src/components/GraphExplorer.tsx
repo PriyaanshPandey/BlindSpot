@@ -236,6 +236,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
   const cyRef = useRef<Core | null>(null);
   const [isLegendOpen, setIsLegendOpen] = useState(false);
   const [layoutMode, setLayoutMode] = useState<'hierarchical' | 'organic'>('hierarchical');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'direct' | 'transitive' | 'deep' | 'vendors' | 'vulnerable'>('all');
 
   useEffect(() => {
     if (!containerRef.current || !graphData) return;
@@ -261,6 +262,67 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       );
       const nodeIds = new Set(activeNodes.map((n) => n.id));
       activeEdges = activeEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+    }
+
+    // Interactive category filter from top pill bar
+    if (categoryFilter === 'direct') {
+      const matchIds = new Set(
+        activeNodes.filter((n) => n.type === 'software_package' && (n as any).subtype === 'direct').map((n) => n.id)
+      );
+      const connectedEdges = activeEdges.filter((e) => matchIds.has(e.source) || matchIds.has(e.target));
+      const connectedNodeIds = new Set<string>();
+      matchIds.forEach((id) => connectedNodeIds.add(id));
+      connectedEdges.forEach((e) => { connectedNodeIds.add(e.source); connectedNodeIds.add(e.target); });
+      activeNodes = activeNodes.filter((n) => connectedNodeIds.has(n.id));
+      activeEdges = connectedEdges;
+    } else if (categoryFilter === 'transitive') {
+      const matchIds = new Set(
+        activeNodes.filter((n) => n.type === 'software_package' && (n as any).subtype === 'transitive').map((n) => n.id)
+      );
+      const connectedEdges = activeEdges.filter((e) => matchIds.has(e.source) || matchIds.has(e.target));
+      const connectedNodeIds = new Set<string>();
+      matchIds.forEach((id) => connectedNodeIds.add(id));
+      connectedEdges.forEach((e) => { connectedNodeIds.add(e.source); connectedNodeIds.add(e.target); });
+      activeNodes = activeNodes.filter((n) => connectedNodeIds.has(n.id));
+      activeEdges = connectedEdges;
+    } else if (categoryFilter === 'deep') {
+      const matchIds = new Set(
+        activeNodes.filter((n) => n.type === 'software_package' && (n as any).subtype === 'deep_transitive').map((n) => n.id)
+      );
+      const connectedEdges = activeEdges.filter((e) => matchIds.has(e.source) || matchIds.has(e.target));
+      const connectedNodeIds = new Set<string>();
+      matchIds.forEach((id) => connectedNodeIds.add(id));
+      connectedEdges.forEach((e) => { connectedNodeIds.add(e.source); connectedNodeIds.add(e.target); });
+      activeNodes = activeNodes.filter((n) => connectedNodeIds.has(n.id));
+      activeEdges = connectedEdges;
+    } else if (categoryFilter === 'vendors') {
+      const matchIds = new Set(
+        activeNodes
+          .filter(
+            (n) =>
+              n.type === 'vendor' ||
+              n.type === 'external_api' ||
+              n.id.startsWith('vendor:') ||
+              n.id.startsWith('upstream:')
+          )
+          .map((n) => n.id)
+      );
+      const connectedEdges = activeEdges.filter((e) => matchIds.has(e.source) || matchIds.has(e.target));
+      const connectedNodeIds = new Set<string>();
+      matchIds.forEach((id) => connectedNodeIds.add(id));
+      connectedEdges.forEach((e) => { connectedNodeIds.add(e.source); connectedNodeIds.add(e.target); });
+      activeNodes = activeNodes.filter((n) => connectedNodeIds.has(n.id));
+      activeEdges = connectedEdges;
+    } else if (categoryFilter === 'vulnerable') {
+      const matchIds = new Set(
+        activeNodes.filter((n) => n.status === 'compromised').map((n) => n.id)
+      );
+      const connectedEdges = activeEdges.filter((e) => matchIds.has(e.source) || matchIds.has(e.target));
+      const connectedNodeIds = new Set<string>();
+      matchIds.forEach((id) => connectedNodeIds.add(id));
+      connectedEdges.forEach((e) => { connectedNodeIds.add(e.source); connectedNodeIds.add(e.target); });
+      activeNodes = activeNodes.filter((n) => connectedNodeIds.has(n.id));
+      activeEdges = connectedEdges;
     }
 
     // Smart node capping: keep all non-package nodes; cap packages
@@ -590,7 +652,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
     return () => {
       cy.destroy();
     };
-  }, [graphData, filterLayer, layoutMode]);
+  }, [graphData, filterLayer, layoutMode, categoryFilter]);
 
   // Selected node & blast radius highlight
   useEffect(() => {
@@ -641,26 +703,86 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
       {/* Cytoscape Canvas */}
       <div ref={containerRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
-      {/* Top Stats Bar */}
+      {/* Top Stats Bar & Interactive Category Filters */}
       {stats && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-4 py-2 rounded-full bg-zinc-950/90 border border-zinc-800 backdrop-blur-xl shadow-xl pointer-events-none">
-          <span className="text-[11px] text-zinc-400 font-medium">{stats.total} nodes</span>
-          <span className="w-px h-3 bg-zinc-700" />
-          <span className="text-[11px] text-sky-400 font-medium">{stats.direct} direct pkgs</span>
-          <span className="w-px h-3 bg-zinc-700" />
-          <span className="text-[11px] text-slate-400 font-medium">{stats.transitive} transitive</span>
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-950/90 border border-zinc-800 backdrop-blur-xl shadow-xl">
+          <button
+            onClick={() => setCategoryFilter('all')}
+            className={`text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+              categoryFilter === 'all'
+                ? 'bg-zinc-800 text-white shadow-sm ring-1 ring-white/20'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+            title="Reset filter to show all graph nodes"
+          >
+            {stats.total} nodes
+          </button>
+          <span className="w-px h-3 bg-zinc-800" />
+          <button
+            onClick={() => setCategoryFilter(categoryFilter === 'direct' ? 'all' : 'direct')}
+            className={`text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+              categoryFilter === 'direct'
+                ? 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/60 shadow-sm'
+                : 'text-sky-400 hover:text-sky-200 hover:bg-sky-500/10'
+            }`}
+            title="Filter graph to direct dependencies"
+          >
+            {stats.direct} direct pkgs
+          </button>
+          <span className="w-px h-3 bg-zinc-800" />
+          <button
+            onClick={() => setCategoryFilter(categoryFilter === 'transitive' ? 'all' : 'transitive')}
+            className={`text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+              categoryFilter === 'transitive'
+                ? 'bg-slate-700/60 text-slate-100 ring-1 ring-slate-500/60 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/20'
+            }`}
+            title="Filter graph to transitive dependencies"
+          >
+            {stats.transitive} transitive
+          </button>
           {stats.deep > 0 && (
             <>
-              <span className="w-px h-3 bg-zinc-700" />
-              <span className="text-[11px] text-indigo-400 font-medium">{stats.deep} 3rd-layer deep</span>
+              <span className="w-px h-3 bg-zinc-800" />
+              <button
+                onClick={() => setCategoryFilter(categoryFilter === 'deep' ? 'all' : 'deep')}
+                className={`text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+                  categoryFilter === 'deep'
+                    ? 'bg-indigo-500/20 text-indigo-300 ring-1 ring-indigo-500/60 shadow-sm'
+                    : 'text-indigo-400 hover:text-indigo-200 hover:bg-indigo-500/10'
+                }`}
+                title="Filter graph to 3rd-layer deep dependencies"
+              >
+                {stats.deep} 3rd-layer deep
+              </button>
             </>
           )}
-          <span className="w-px h-3 bg-zinc-700" />
-          <span className="text-[11px] text-rose-400 font-medium">{stats.vendors} vendors/APIs</span>
+          <span className="w-px h-3 bg-zinc-800" />
+          <button
+            onClick={() => setCategoryFilter(categoryFilter === 'vendors' ? 'all' : 'vendors')}
+            className={`text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+              categoryFilter === 'vendors'
+                ? 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/60 shadow-sm'
+                : 'text-rose-400 hover:text-rose-200 hover:bg-rose-500/10'
+            }`}
+            title="Filter graph to external vendors and APIs"
+          >
+            {stats.vendors} vendors/APIs
+          </button>
           {stats.vulnerable > 0 && (
             <>
-              <span className="w-px h-3 bg-zinc-700" />
-              <span className="text-[11px] text-red-400 font-semibold animate-pulse">{stats.vulnerable} ⚠ CVE/Outage</span>
+              <span className="w-px h-3 bg-zinc-800" />
+              <button
+                onClick={() => setCategoryFilter(categoryFilter === 'vulnerable' ? 'all' : 'vulnerable')}
+                className={`text-[11px] font-semibold px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+                  categoryFilter === 'vulnerable'
+                    ? 'bg-red-500/30 text-red-200 ring-1 ring-red-500/70 shadow-sm animate-pulse'
+                    : 'text-red-400 hover:text-red-200 hover:bg-red-500/10 animate-pulse'
+                }`}
+                title="Filter graph to vulnerable compromised components"
+              >
+                {stats.vulnerable} ⚠ CVE/Outage
+              </button>
             </>
           )}
         </div>

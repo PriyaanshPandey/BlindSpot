@@ -522,3 +522,4 @@ async def chat_with_gemini(
 
     # Return honest fallback on failure
     return generate_fallback_chat_response(clean_message, context, last_error_status, last_error_message)
+

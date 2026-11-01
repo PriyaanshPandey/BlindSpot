@@ -121,3 +121,4 @@ def test_chat_route_follow_up():
         assert response.status_code == 200
         data = response.json()
         assert "Order Processing" in data["answer"]
+

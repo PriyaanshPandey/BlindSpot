@@ -156,34 +156,7 @@ export const AppHeaderStrip: React.FC<AppHeaderStripProps> = ({
 
       {/* Mode Toggle & Floating Graph Layers */}
       <div className="flex items-center gap-3">
-        {setMode && (
-          <div className="bg-black/60 p-1 rounded-xl border border-white/10 flex items-center shadow-inner">
-            <button
-              onClick={() => setMode('builder')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                mode === 'builder'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-              title="Builder Mode: Developer Fixes, Terminal Commands & Code Patches"
-            >
-              <Wrench className="w-3.5 h-3.5" />
-              <span>Builder Mode</span>
-            </button>
-            <button
-              onClick={() => setMode('enterprise')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                mode === 'enterprise'
-                  ? 'bg-gradient-to-r from-purple-600 to-rose-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-              title="Enterprise Mode: SRE Architecture Blast Radius, Business Continuity & Risk %"
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              <span>Enterprise Mode</span>
-            </button>
-          </div>
-        )}
+
 
         {/* Floating Graph Layers (Visible only on Graph tab) */}
         {activeTab === 'graph' && (
