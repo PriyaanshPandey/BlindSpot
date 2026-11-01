@@ -10,6 +10,7 @@ import { NodeInspectorDrawer } from './components/NodeInspectorDrawer';
 import { FailureSimulationPanel } from './components/FailureSimulationPanel';
 import { LandingPage } from './components/LandingPage';
 import { ThirdPartyIntelligenceView } from './components/ThirdPartyIntelligenceView';
+import { LiveRadarView } from './components/LiveRadarView';
 import {
   ShieldCheck,
   Flame,
@@ -248,164 +249,20 @@ export const App: React.FC = () => {
 
           {/* Tab 2: Live Radar (Vulnerabilities & Drift) */}
           {activeTab === 'findings' && (
-            <div className="p-8 max-w-6xl mx-auto space-y-6 overflow-y-auto h-full">
-              {/* Mode Banner Indicator */}
-              <div className={`p-3 rounded-2xl border flex items-center justify-between text-xs transition-all ${
-                mode === 'builder'
-                  ? 'bg-blue-950/30 border-blue-500/30 text-blue-200'
-                  : 'bg-purple-950/30 border-purple-500/30 text-purple-200'
-              }`}>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                    mode === 'builder'
-                      ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                      : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                  }`}>
-                    {mode === 'builder' ? 'Builder Mode Active' : 'Enterprise Mode Active'}
-                  </span>
-                  <span className="text-slate-300 text-[11px]">
-                    {mode === 'builder'
-                      ? 'Displaying developer fix commands, exact manifest paths, and package-level remediation.'
-                      : 'Displaying SRE business continuity impact, journey resilience %, and architecture drift.'}
-                  </span>
-                </div>
-                <div className="text-[11px] font-mono text-slate-400 hidden sm:block">
-                  Perspective: <strong className="text-white uppercase">{mode}</strong>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                    <Radar className="w-5 h-5 text-rose-500 animate-pulse" />
-                    <span>Live Radar</span>
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Real-time monitoring across 1st-party code, 3rd-party dependencies, 4th-party transitives, and external cloud APIs.
-                  </p>
-                </div>
-                <span className="text-xs bg-rose-500/10 text-rose-300 border border-rose-500/20 px-3 py-1 rounded-xl font-semibold flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                  {findings.length} Live Alerts
-                </span>
-              </div>
-
-              {findings.length === 0 ? (
-                <div className="p-12 rounded-3xl bg-black/60 border border-white/10 text-center space-y-2">
-                  <ShieldCheck className="w-10 h-10 text-emerald-400 mx-auto" />
-                  <h3 className="font-bold text-white">Zero Known Vulnerabilities or Discrepancies</h3>
-                  <p className="text-xs text-slate-400">All scanned dependencies, transitives, and endpoints are verified healthy.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {findings.map((finding) => (
-                    <div
-                      key={finding.id}
-                      className="p-5 rounded-2xl bg-black/60 border border-white/10 hover:border-white/20 transition-all space-y-3 shadow-xl backdrop-blur-md"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                              finding.severity === 'critical'
-                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                                : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                            }`}
-                          >
-                            {finding.severity}
-                          </span>
-                          <h4 className="font-bold text-white text-sm">{finding.title}</h4>
-                        </div>
-                        <span className="font-mono text-xs text-rose-400 bg-white/[0.04] px-2 py-0.5 rounded border border-white/10">
-                          {finding.target_node_id}
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-300 leading-relaxed">{finding.description}</p>
-
-                      {/* Safe Remediation */}
-                      {finding.remediation && (
-                        <div className="p-3 rounded-xl bg-white/[0.02] border border-emerald-500/20 space-y-1">
-                          <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                            <Wrench className="w-3 h-3" /> Recommended Action:
-                          </span>
-                          <p className="text-xs text-slate-300 font-mono">
-                            {finding.remediation.recommended_action}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Builder Mode: Quick Terminal Fix Snippet */}
-                      {mode === 'builder' && (
-                        <div className="p-2.5 rounded-xl bg-blue-950/25 border border-blue-500/25 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2 overflow-x-auto">
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase">
-                              Terminal Fix
-                            </span>
-                            <code className="text-blue-200 font-mono text-[11px]">
-                              {finding.target_node_id.startsWith('pkg:')
-                                ? `npm update ${finding.target_node_id.replace('pkg:trans:', '').replace('pkg:', '')}@latest`
-                                : `git grep -n "${finding.target_node_id.replace('ext:', '')}"`}
-                            </code>
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-mono shrink-0">Developer Fast-Patch</span>
-                        </div>
-                      )}
-
-                      {/* Enterprise Mode: Business Operation & Risk Scope */}
-                      {mode === 'enterprise' && (
-                        <div className="p-2.5 rounded-xl bg-purple-950/25 border border-purple-500/25 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase">
-                              Business Scope
-                            </span>
-                            <span className="text-slate-300 text-[11px]">
-                              Impacted Operation: <strong className="text-purple-200">{finding.affected_journey_ids?.join(', ') || 'Core Flow'}</strong>
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-purple-400 font-mono shrink-0">SRE / CISO Tier 1</span>
-                        </div>
-                      )}
-
-                      {/* Action Buttons: Trace in Graph & Gemini AI Explain */}
-                      <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06]">
-                        <div className="flex items-center gap-2.5">
-                          <button
-                            onClick={() => {
-                              setActiveTab('graph');
-                              const targetNode = graphData?.nodes.find((n) => n.id === finding.target_node_id);
-                              if (targetNode) {
-                                setSelectedNode(targetNode);
-                              }
-                              handleSimulateOutage(finding.target_node_id, 4);
-                            }}
-                            className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 font-semibold text-xs transition-all cursor-pointer"
-                          >
-                            <Radar className="w-3.5 h-3.5 text-rose-400" />
-                            <span>Trace Infection in Graph</span>
-                          </button>
-
-                          <button
-                            onClick={() => setSelectedFindingForAI(finding)}
-                            className="flex items-center gap-2 py-2 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white font-semibold text-xs shadow-lg shadow-purple-600/20 transition-all cursor-pointer"
-                          >
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>Explain with Gemini AI</span>
-                            <ArrowUpRight className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        <span className="text-[11px] text-slate-500">
-                          Evidence: {finding.evidence_references?.join(', ')}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <LiveRadarView
+              findings={findings}
+              graphData={graphData}
+              onTraceInGraph={(nodeId) => {
+                setActiveTab('graph');
+                const targetNode = graphData?.nodes.find((n) => n.id === nodeId);
+                if (targetNode) {
+                  setSelectedNode(targetNode);
+                }
+                handleSimulateOutage(nodeId, 4);
+              }}
+              onExplainAI={(finding) => setSelectedFindingForAI(finding)}
+            />
           )}
-
           {/* Tab 3: Failure Simulator */}
           {activeTab === 'simulation' && (
             <div className="p-8 max-w-6xl mx-auto space-y-6 overflow-y-auto h-full">
