@@ -172,5 +172,15 @@ export interface AIExplanation {
   confidence_score: number;
   is_ai_generated: boolean;
   is_fallback: boolean;
+  ai_status?: string;
+  error_message?: string;
+  model_used?: string;
   notice: string;
+}
+
+export interface AIStatusResponse {
+  status: 'AI_READY' | 'AI_NOT_CONFIGURED' | 'AI_UNAVAILABLE_OFFLINE' | 'AI_AUTH_FAILED' | 'AI_QUOTA_EXCEEDED' | 'AI_MODEL_UNAVAILABLE' | 'AI_REQUEST_FAILED';
+  configured: boolean;
+  model: string;
+  message: string;
 }
