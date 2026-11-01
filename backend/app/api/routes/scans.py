@@ -588,19 +588,23 @@ def build_unified_graph(project_data: Dict[str, Any]) -> tuple:
         }
     }
     db.in_memory_scans[scan_id] = scan_record
-
-    try:
-        import asyncio
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(ScanRepository.save_scan(scan_record))
-            asyncio.create_task(GraphRepository.save_graph(graph_dict))
-            asyncio.create_task(FindingRepository.save_findings(scan_id, findings))
-            asyncio.create_task(EvidenceRepository.save_evidence(scan_id, evidence_records))
-    except Exception:
-        pass
-
     return scan_record
+
+
+async def _persist_scan_to_db(scan_record: Dict[str, Any]):
+    if not (db.is_connected and db.motor_db is not None):
+        return
+    try:
+        scan_id = scan_record["scan_id"]
+        graph_dict = db.in_memory_graphs.get(scan_id, {"nodes": [], "edges": []})
+        findings = db.in_memory_findings.get(scan_id, [])
+        evidence = db.in_memory_evidence.get(scan_id, [])
+        await ScanRepository.save_scan(scan_record)
+        await GraphRepository.save_graph(graph_dict)
+        await FindingRepository.save_findings(scan_id, findings)
+        await EvidenceRepository.save_evidence(scan_id, evidence)
+    except Exception as e:
+        logger.warning(f"Failed to persist scan {scan_record.get('scan_id')} to MongoDB: {e}")
 
 
 @router.post("")
@@ -618,7 +622,9 @@ async def create_scan(request: ScanRequest):
             if h and h not in obs:
                 obs.append(h)
 
-    return build_unified_graph(project_scan)
+    scan_record = build_unified_graph(project_scan)
+    await _persist_scan_to_db(scan_record)
+    return scan_record
 
 
 @router.post("/direct")
