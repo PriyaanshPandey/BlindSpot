@@ -15,7 +15,9 @@ import {
   Clock,
   ShieldAlert,
   HelpCircle,
-  RotateCcw
+  RotateCcw,
+  Loader2,
+  ServerOff
 } from 'lucide-react';
 import { Finding, AIExplanation, AIStatusResponse } from '../types';
 import { previewAIPayload, explainFindingAI, getAIStatus } from '../api/client';
@@ -37,11 +39,30 @@ export const AIExplainModal: React.FC<AIExplainModalProps> = ({
   const [explanation, setExplanation] = useState<AIExplanation | null>(null);
   const [hasApproved, setHasApproved] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStatusChecking, setIsStatusChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('blindspot_gemini_key') || '');
 
   const effectiveAudience = mode === 'enterprise' ? 'enterprise' : 'builder';
+
+  const fetchStatus = async (forceRefresh: boolean = false) => {
+    setIsStatusChecking(true);
+    try {
+      const status = await getAIStatus(forceRefresh);
+      setAiStatus(status);
+    } catch (err: any) {
+      // Distinguish backend unavailability from Gemini offline
+      setAiStatus({
+        status: 'BACKEND_UNAVAILABLE',
+        configured: false,
+        model: 'gemini-3.6-flash',
+        message: 'BlindSpot backend API cannot be reached.'
+      });
+    } finally {
+      setIsStatusChecking(false);
+    }
+  };
 
   useEffect(() => {
     if (finding && isOpen) {
@@ -49,17 +70,8 @@ export const AIExplainModal: React.FC<AIExplainModalProps> = ({
       setError(null);
       setHasApproved(false);
 
-      // Check backend AI readiness status
-      getAIStatus()
-        .then((status) => setAiStatus(status))
-        .catch(() => {
-          setAiStatus({
-            status: 'AI_UNAVAILABLE_OFFLINE',
-            configured: false,
-            model: 'gemini-3.6-flash',
-            message: 'Backend AI status check failed'
-          });
-        });
+      // Refresh Gemini status check whenever modal opens
+      fetchStatus(false);
 
       // Load pre-sanitized context
       previewAIPayload(finding, effectiveAudience)
@@ -89,6 +101,13 @@ export const AIExplainModal: React.FC<AIExplainModalProps> = ({
         apiKey.trim() || undefined
       );
       setExplanation(res);
+      // Successful explanation updates last-known status to ready
+      setAiStatus({
+        status: 'AI_READY',
+        configured: true,
+        model: res.model_used || 'gemini-3.6-flash',
+        message: 'Gemini AI intelligence service is ready and operational.'
+      });
     } catch (err: any) {
       setError(err.message || 'AI request failed');
     } finally {
@@ -98,47 +117,77 @@ export const AIExplainModal: React.FC<AIExplainModalProps> = ({
 
   if (!isOpen || !finding) return null;
 
-  // Visual status pill helper
+  // Visual status pill helper adhering to audited status taxonomy
   const renderStatusBadge = (status?: string) => {
+    if (isStatusChecking) {
+      return (
+        <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/30">
+          <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+          Checking Gemini
+        </span>
+      );
+    }
+
     switch (status) {
       case 'AI_READY':
         return (
-          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            AI Ready
+            Gemini online
           </span>
         );
       case 'AI_NOT_CONFIGURED':
         return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-amber-500/10 text-amber-300 border border-amber-500/30">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30">
             <AlertTriangle className="w-3 h-3 text-amber-400" />
-            Not Configured (Using Local Rules)
+            Gemini not configured
+          </span>
+        );
+      case 'BACKEND_UNAVAILABLE':
+        return (
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+            <ServerOff className="w-3 h-3 text-rose-400" />
+            Backend unavailable
           </span>
         );
       case 'AI_AUTH_FAILED':
         return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-rose-500/15 text-rose-300 border border-rose-500/30">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">
             <ShieldAlert className="w-3 h-3 text-rose-400" />
-            Auth Failed (Invalid Key)
+            Gemini authentication failed
           </span>
         );
       case 'AI_QUOTA_EXCEEDED':
         return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-purple-500/15 text-purple-300 border border-purple-500/30">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
             <Clock className="w-3 h-3 text-purple-400" />
-            Rate Limit / Quota
+            Gemini quota exceeded
+          </span>
+        );
+      case 'AI_MODEL_UNAVAILABLE':
+        return (
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+            <AlertTriangle className="w-3 h-3 text-rose-400" />
+            Gemini model unavailable
           </span>
         );
       case 'AI_UNAVAILABLE_OFFLINE':
         return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-slate-800 text-slate-300 border border-slate-700">
-            <WifiOff className="w-3 h-3 text-slate-400" />
-            Offline / Unreachable
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+            <WifiOff className="w-3 h-3 text-amber-400" />
+            Gemini temporarily unavailable
+          </span>
+        );
+      case 'AI_REQUEST_FAILED':
+        return (
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+            <AlertTriangle className="w-3 h-3 text-rose-400" />
+            Gemini request failed
           </span>
         );
       default:
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-slate-800 text-slate-400 border border-slate-700">
+          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
             {status || 'Local Analysis'}
           </span>
         );
@@ -160,6 +209,14 @@ export const AIExplainModal: React.FC<AIExplainModalProps> = ({
                   Gemini AI Security & Dependency Analysis
                 </h3>
                 {renderStatusBadge(aiStatus?.status)}
+                <button
+                  onClick={() => fetchStatus(true)}
+                  disabled={isStatusChecking}
+                  title="Refresh Gemini availability check"
+                  className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isStatusChecking ? 'animate-spin text-blue-400' : ''}`} />
+                </button>
               </div>
               <p className="text-xs text-slate-400">
                 Target Finding: <strong className="text-rose-400">{finding.title}</strong>
@@ -255,9 +312,9 @@ export const AIExplainModal: React.FC<AIExplainModalProps> = ({
               )}
 
               <button
-                disabled={!hasApproved || isLoading}
+                disabled={!hasApproved || isLoading || aiStatus?.status === 'BACKEND_UNAVAILABLE' || aiStatus?.status === 'AI_NOT_CONFIGURED' || aiStatus?.status === 'AI_AUTH_FAILED' || aiStatus?.status === 'AI_MODEL_UNAVAILABLE'}
                 onClick={handleExecuteExplain}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 disabled:opacity-40 text-white font-semibold text-xs shadow-lg transition-all cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-lg transition-all cursor-pointer"
               >
                 {isLoading ? (
                   <>

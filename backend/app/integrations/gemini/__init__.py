@@ -60,24 +60,132 @@ def get_gemini_api_key(override_key: Optional[str] = None) -> str:
     return key.strip()
 
 
-def check_gemini_status(api_key: Optional[str] = None) -> Dict[str, Any]:
+import time
+
+_STATUS_CACHE: Dict[str, Any] = {
+    "data": None,
+    "timestamp": 0.0,
+    "key_hash": None,
+    "model": None
+}
+_STATUS_CACHE_TTL_SECONDS = 30.0
+
+
+def update_gemini_status_cache(status_code: str, message: str, model: str):
+    """Updates the shared in-memory status cache when live operations complete."""
+    _STATUS_CACHE["data"] = {
+        "status": status_code,
+        "configured": status_code != STATUS_AI_NOT_CONFIGURED,
+        "model": model,
+        "message": message,
+        "checked_at": time.time()
+    }
+    _STATUS_CACHE["timestamp"] = time.time()
+    _STATUS_CACHE["model"] = model
+
+
+def check_gemini_status(api_key: Optional[str] = None, force_refresh: bool = False) -> Dict[str, Any]:
     """
-    Returns visibility into Gemini configuration state without transmitting customer data.
+    Authoritative single-source status verification for Google Gemini:
+    - AI_NOT_CONFIGURED: API key missing.
+    - AI_READY: API key valid, network reachable, and configured model verified available via lightweight metadata check.
+    - AI_AUTH_FAILED: Google rejected API key (401/403/API_KEY_INVALID).
+    - AI_QUOTA_EXCEEDED: Quota/rate-limit reached (429/RESOURCE_EXHAUSTED).
+    - AI_MODEL_UNAVAILABLE: Configured model not found (404/NOT_FOUND).
+    - AI_UNAVAILABLE_OFFLINE: Network down, timeout, or transient 503.
+    - AI_REQUEST_FAILED: Other unexpected error.
+    Uses lightweight model metadata check (client.models.get) with 30s caching.
     """
+    model_name = getattr(settings, "GEMINI_MODEL", None) or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
     key = get_gemini_api_key(api_key)
     if not key:
         return {
             "status": STATUS_AI_NOT_CONFIGURED,
             "configured": False,
-            "model": DEFAULT_GEMINI_MODEL,
+            "model": model_name,
             "message": "GEMINI_API_KEY is not configured in backend environment or request."
         }
-    return {
-        "status": STATUS_AI_READY,
-        "configured": True,
-        "model": DEFAULT_GEMINI_MODEL,
-        "message": "Gemini AI intelligence service is ready."
-    }
+
+    now = time.time()
+    key_hash = hash(key)
+    if (
+        not force_refresh
+        and _STATUS_CACHE["data"] is not None
+        and _STATUS_CACHE["key_hash"] == key_hash
+        and _STATUS_CACHE["model"] == model_name
+        and (now - _STATUS_CACHE["timestamp"] < _STATUS_CACHE_TTL_SECONDS)
+    ):
+        return _STATUS_CACHE["data"]
+
+    # Perform lightweight model metadata/availability verification
+    try:
+        from google import genai
+        from google.genai.errors import APIError
+
+        client = genai.Client(api_key=key)
+        # Lightweight metadata GET: 0 tokens generated, non-destructive, verifies auth + model availability + network
+        model_info = client.models.get(model=model_name)
+        display = getattr(model_info, "display_name", model_name) or model_name
+        res = {
+            "status": STATUS_AI_READY,
+            "configured": True,
+            "model": model_name,
+            "display_name": display,
+            "message": f"Gemini AI verified and reachable ({display})."
+        }
+    except Exception as e:
+        err_msg = str(e)
+        err_lower = err_msg.lower()
+        code = getattr(e, "code", None) or getattr(e, "status_code", None)
+
+        if code in [400, 401, 403] or any(t in err_lower for t in ["api_key_invalid", "permission_denied", "invalid api key", "unregistered_callers"]):
+            res = {
+                "status": STATUS_AI_AUTH_FAILED,
+                "configured": True,
+                "model": model_name,
+                "message": "Gemini authentication failed: Invalid API key or permission denied."
+            }
+        elif code == 404 or any(t in err_lower for t in ["not_found", "model not found", "is not supported"]):
+            res = {
+                "status": STATUS_AI_MODEL_UNAVAILABLE,
+                "configured": True,
+                "model": model_name,
+                "message": f"Configured model '{model_name}' was not found or is unavailable."
+            }
+        elif code == 429 or any(t in err_lower for t in ["resource_exhausted", "quota", "rate limit"]):
+            res = {
+                "status": STATUS_AI_QUOTA_EXCEEDED,
+                "configured": True,
+                "model": model_name,
+                "message": "Gemini quota or rate limit exceeded."
+            }
+        elif code == 503 or "unavailable" in err_lower:
+            res = {
+                "status": STATUS_AI_UNAVAILABLE_OFFLINE,
+                "configured": True,
+                "model": model_name,
+                "message": "Gemini service is temporarily unavailable (HTTP 503)."
+            }
+        elif isinstance(e, (ConnectionError, TimeoutError, OSError)) or any(term in err_lower for term in ["connect", "timeout", "unreachable", "dns", "socket", "network", "gaierror", "resolve", "host"]):
+            res = {
+                "status": STATUS_AI_UNAVAILABLE_OFFLINE,
+                "configured": True,
+                "model": model_name,
+                "message": "Google Gemini API is unreachable (network or connection failure)."
+            }
+        else:
+            res = {
+                "status": STATUS_AI_REQUEST_FAILED,
+                "configured": True,
+                "model": model_name,
+                "message": f"Gemini status check failed: {err_msg[:120]}"
+            }
+
+    _STATUS_CACHE["data"] = res
+    _STATUS_CACHE["timestamp"] = now
+    _STATUS_CACHE["key_hash"] = key_hash
+    _STATUS_CACHE["model"] = model_name
+    return res
 
 
 def _strip_canaries(text: str) -> str:
@@ -334,6 +442,7 @@ Respond strictly in valid JSON without markdown code fences (```):
             # Post-generation authoritative validation layer
             grounded = validate_and_ground_explanation(data, auth, sanitized["audience"])
 
+            update_gemini_status_cache(STATUS_AI_READY, f"Gemini AI verified and reachable ({model_name}).", model_name)
             return {
                 "finding_id": sanitized.get("finding_id"),
                 "target_package": sanitized.get("target_package"),

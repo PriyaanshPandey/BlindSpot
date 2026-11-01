@@ -55,11 +55,12 @@ class VendorEnrichRequest(BaseModel):
     vendor_domain: str = "stripe.com"
 
 @router.get("/status")
-async def get_ai_status():
+async def get_ai_status(refresh: bool = False):
     """
     Returns the current readiness and configuration status of the Gemini AI integration.
+    Supports ?refresh=true to force a fresh verification check against the Google API.
     """
-    return check_gemini_status()
+    return check_gemini_status(force_refresh=refresh)
 
 @router.post("/preview-payload")
 async def preview_ai_payload(request: PreviewPayloadRequest):

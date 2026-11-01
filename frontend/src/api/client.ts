@@ -172,8 +172,9 @@ export async function verifyKnowledgeBundle(simulateTamper: boolean = false): Pr
 }
 
 
-export async function getAIStatus(): Promise<AIStatusResponse> {
-  const res = await fetch(`/ai/status`);
-  if (!res.ok) throw new Error(`Fetch AI status failed: `);
+export async function getAIStatus(refresh: boolean = false): Promise<AIStatusResponse> {
+  const url = refresh ? `/api/v1/ai/status?refresh=true` : `/api/v1/ai/status`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch AI status failed: HTTP ${res.status}`);
   return res.json();
 }

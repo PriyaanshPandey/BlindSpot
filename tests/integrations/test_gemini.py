@@ -77,10 +77,50 @@ def test_check_gemini_status_unconfigured():
 
 
 def test_check_gemini_status_configured():
-    with patch("app.integrations.gemini.get_gemini_api_key", return_value="AIzaSyTestValidKeyMock12345"):
-        status = check_gemini_status()
+    with patch("app.integrations.gemini.get_gemini_api_key", return_value="AIzaSyTestValidKeyMock12345"),          patch("google.genai.Client") as MockClient:
+        mock_instance = MockClient.return_value
+        mock_instance.models.get.return_value = MagicMock(display_name="Gemini 3.6 Flash")
+        status = check_gemini_status(force_refresh=True)
         assert status["status"] == STATUS_AI_READY
         assert status["configured"] is True
+        assert status["model"] == "gemini-3.6-flash"
+
+
+def test_check_gemini_status_auth_failed():
+    err = APIError(403, {"message": "API key not valid."})
+    with patch("app.integrations.gemini.get_gemini_api_key", return_value="bad_key"),          patch("google.genai.Client") as MockClient:
+        mock_instance = MockClient.return_value
+        mock_instance.models.get.side_effect = err
+        status = check_gemini_status(force_refresh=True)
+        assert status["status"] == STATUS_AI_AUTH_FAILED
+        assert status["configured"] is True
+
+
+def test_check_gemini_status_quota_exceeded():
+    err = APIError(429, {"message": "Resource has been exhausted (e.g. check quota)."})
+    with patch("app.integrations.gemini.get_gemini_api_key", return_value="key"),          patch("google.genai.Client") as MockClient:
+        mock_instance = MockClient.return_value
+        mock_instance.models.get.side_effect = err
+        status = check_gemini_status(force_refresh=True)
+        assert status["status"] == STATUS_AI_QUOTA_EXCEEDED
+
+
+def test_check_gemini_status_model_unavailable():
+    err = APIError(404, {"message": "models/unknown is not found"})
+    with patch("app.integrations.gemini.get_gemini_api_key", return_value="key"),          patch("google.genai.Client") as MockClient:
+        mock_instance = MockClient.return_value
+        mock_instance.models.get.side_effect = err
+        status = check_gemini_status(force_refresh=True)
+        assert status["status"] == STATUS_AI_MODEL_UNAVAILABLE
+
+
+def test_check_gemini_status_offline_unreachable():
+    with patch("app.integrations.gemini.get_gemini_api_key", return_value="key"),          patch("google.genai.Client") as MockClient:
+        mock_instance = MockClient.return_value
+        mock_instance.models.get.side_effect = ConnectionError("Failed to resolve host generativelanguage.googleapis.com")
+        status = check_gemini_status(force_refresh=True)
+        assert status["status"] == STATUS_AI_UNAVAILABLE_OFFLINE
+        assert "unreachable" in status["message"].lower()
 
 
 # 3. Missing Key Deterministic Fallback Test

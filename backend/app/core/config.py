@@ -1,9 +1,20 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Resolve .env relative to the backend project root, independent of process cwd
+BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
+env_file_path = BACKEND_ROOT / ".env"
+if env_file_path.exists():
+    # override=False ensures that valid existing process/system environment variables are never overwritten with empty values
+    load_dotenv(dotenv_path=env_file_path, override=False)
+
 try:
     from pydantic_settings import BaseSettings
 except ImportError:
     from pydantic import BaseModel as BaseSettings
 from typing import List
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Hidden Dependency X-Ray"
@@ -32,12 +43,13 @@ class Settings(BaseSettings):
     KNOWLEDGE_BUNDLE_PUBLIC_KEY: str = os.getenv("KNOWLEDGE_BUNDLE_PUBLIC_KEY", "")
 
     # Integrations
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    GEMINI_API_KEY: str = (os.getenv("GEMINI_API_KEY") or "").strip()
+    GEMINI_MODEL: str = (os.getenv("GEMINI_MODEL") or "gemini-3.6-flash").strip() or "gemini-3.6-flash"
     SOLANA_RPC_URL: str = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
 
     class Config:
-        env_file = ".env"
+        env_file = str(env_file_path)
         extra = "allow"
+
 
 settings = Settings()

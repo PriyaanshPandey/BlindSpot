@@ -222,8 +222,18 @@ export interface AIExplanation {
 }
 
 export interface AIStatusResponse {
-  status: 'AI_READY' | 'AI_NOT_CONFIGURED' | 'AI_UNAVAILABLE_OFFLINE' | 'AI_AUTH_FAILED' | 'AI_QUOTA_EXCEEDED' | 'AI_MODEL_UNAVAILABLE' | 'AI_REQUEST_FAILED';
+  status:
+    | 'AI_READY'
+    | 'AI_NOT_CONFIGURED'
+    | 'AI_UNAVAILABLE_OFFLINE'
+    | 'AI_AUTH_FAILED'
+    | 'AI_QUOTA_EXCEEDED'
+    | 'AI_MODEL_UNAVAILABLE'
+    | 'AI_REQUEST_FAILED'
+    | 'AI_CHECKING'
+    | 'BACKEND_UNAVAILABLE';
   configured: boolean;
   model: string;
   message: string;
+  display_name?: string;
 }
